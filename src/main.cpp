@@ -18,6 +18,9 @@ ElementType currentElement = ElementType::Liquid_Water;
 sf::Font font;
 sf::Text* infoText = nullptr;
 
+// Forward declarations
+void syncTileMap();
+
 void initializeDemo() {
     LOG_INFO("Initializing demo");
     
@@ -46,6 +49,22 @@ void initializeDemo() {
     simGrid.setCellType(16, 15, ElementType::Empty);
     simGrid.setCellType(17, 15, ElementType::Empty);
     
+    // Add some test water and gas
+    for (int x = 5; x < 10; ++x) {
+        simGrid.setCellType(x, 28, ElementType::Liquid_Water);
+    }
+    for (int x = 30; x < 35; ++x) {
+        simGrid.setCellType(x, 5, ElementType::Gas_O2);
+    }
+    
+    // Update all cell colors
+    for (int y = 0; y < simGrid.getHeight(); ++y) {
+        for (int x = 0; x < simGrid.getWidth(); ++x) {
+            Cell& cell = simGrid.getCell(x, y);
+            cell.updateColor();
+        }
+    }
+    
     // Load font
     if (!font.openFromFile("assets/fonts/arial.ttf")) {
         LOG_ERROR("Failed to load font!");
@@ -54,6 +73,44 @@ void initializeDemo() {
     infoText->setFillColor(sf::Color::White);
     infoText->setPosition(sf::Vector2f(10, 10));
     
+    // Sync tilemap with simulation grid (do this LAST)
+    // Simple version: just set walls manually
+    TileInfo wallTile;
+    wallTile.color = sf::Color(128, 128, 128);
+    wallTile.solid = true;
+    wallTile.name = "Solid";
+    
+    TileInfo waterTile;
+    waterTile.color = sf::Color(50, 100, 255, 180);
+    waterTile.solid = false;
+    waterTile.name = "Water";
+    
+    TileInfo gasTile;
+    gasTile.color = sf::Color(100, 150, 255, 100);
+    gasTile.solid = false;
+    gasTile.name = "O2";
+    
+    for (int x = 0; x < 40; ++x) {
+        tileMap.setTile(x, 0, wallTile);
+        tileMap.setTile(x, 29, wallTile);
+    }
+    for (int y = 0; y < 30; ++y) {
+        tileMap.setTile(0, y, wallTile);
+        tileMap.setTile(39, y, wallTile);
+    }
+    for (int x = 10; x < 30; ++x) {
+        tileMap.setTile(x, 15, wallTile);
+    }
+    // Add water and gas
+    for (int x = 5; x < 10; ++x) {
+        tileMap.setTile(x, 28, waterTile);
+    }
+    for (int x = 30; x < 35; ++x) {
+        tileMap.setTile(x, 5, gasTile);
+    }
+    
+    std::cout << "Tilemap setup complete" << std::endl;
+    
     LOG_INFO("Demo initialized");
 }
 
@@ -61,19 +118,72 @@ void handleMouseInput(const sf::Event& event) {
     if (event.is<sf::Event::MouseButtonPressed>()) {
         auto mouseButton = event.getIf<sf::Event::MouseButtonPressed>();
         if (mouseButton) {
+            // Get mouse position in screen coordinates
             sf::Vector2i mousePos = sf::Mouse::getPosition(renderer.getRenderWindow());
-            sf::Vector2f worldPos = renderer.getCamera().screenToWorld(mousePos.x, mousePos.y);
-            sf::Vector2i tilePos = tileMap.getTileAt(worldPos.x, worldPos.y);
             
-            if (simGrid.isValidPosition(tilePos.x, tilePos.y)) {
+            // Convert to tile coordinates (32px tiles)
+            int tileX = mousePos.x / 32;
+            int tileY = mousePos.y / 32;
+            
+            if (simGrid.isValidPosition(tileX, tileY)) {
                 if (mouseButton->button == sf::Mouse::Button::Left) {
                     // Place element
-                    simGrid.setCellType(tilePos.x, tilePos.y, currentElement);
+                    simGrid.setCellType(tileX, tileY, currentElement);
+                    
+                    // Update tile directly
+                    sf::Color color = sf::Color::Transparent;
+                    std::string name = "Empty";
+                    if (currentElement == ElementType::Solid) {
+                        color = sf::Color(128, 128, 128);
+                        name = "Solid";
+                    } else if (currentElement == ElementType::Liquid_Water) {
+                        color = sf::Color(50, 100, 255, 180);
+                        name = "Water";
+                    } else if (currentElement == ElementType::Liquid_Lava) {
+                        color = sf::Color(255, 100, 0, 200);
+                        name = "Lava";
+                    } else if (currentElement == ElementType::Gas_O2) {
+                        color = sf::Color(100, 150, 255, 100);
+                        name = "O2";
+                    } else if (currentElement == ElementType::Gas_CO2) {
+                        color = sf::Color(100, 100, 100, 120);
+                        name = "CO2";
+                    }
+                    
+                    TileInfo tileInfo;
+                    tileInfo.color = color;
+                    tileInfo.solid = (currentElement == ElementType::Solid);
+                    tileInfo.name = name;
+                    tileMap.setTile(tileX, tileY, tileInfo);
+                    std::cout << "Placed " << name << " at (" << tileX << ", " << tileY << ")" << std::endl;
                 } else if (mouseButton->button == sf::Mouse::Button::Right) {
                     // Clear cell
-                    simGrid.setCellType(tilePos.x, tilePos.y, ElementType::Empty);
+                    simGrid.setCellType(tileX, tileY, ElementType::Empty);
+                    TileInfo emptyTile;
+                    emptyTile.color = sf::Color::Transparent;
+                    emptyTile.solid = false;
+                    emptyTile.name = "Empty";
+                    tileMap.setTile(tileX, tileY, emptyTile);
                 }
             }
+        }
+    }
+}
+
+void syncTileMap() {
+    int height = simGrid.getHeight();
+    int width = simGrid.getWidth();
+    
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            if (!simGrid.isValidPosition(x, y)) continue;
+            
+            const Cell& cell = simGrid.getCell(x, y);
+            TileInfo tileInfo;
+            tileInfo.color = cell.color;
+            tileInfo.solid = (cell.elementType == ElementType::Solid);
+            tileInfo.name = ElementTypes::getTypeName(cell.elementType);
+            tileMap.setTile(x, y, tileInfo);
         }
     }
 }
@@ -89,13 +199,26 @@ void updateSimulation(float deltaTime) {
 void renderDemo() {
     renderer.beginFrame();
     
-    // Draw tile map
-    renderer.drawTileMap(tileMap);
+    // Render all tiles from tileMap
+    sf::RectangleShape tileRect(sf::Vector2f(32, 32));
+    int width = tileMap.getWidth();
+    int height = tileMap.getHeight();
+    
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            TileInfo tile = tileMap.getTile(x, y);
+            if (tile.color.a > 0) {  // Only draw non-transparent tiles
+                tileRect.setPosition(sf::Vector2f(x * 32.0f, y * 32.0f));
+                tileRect.setFillColor(tile.color);
+                renderer.drawRectangle(tileRect);
+            }
+        }
+    }
     
     // Draw info text
     std::string elementName = ElementTypes::getTypeName(currentElement);
     if (infoText) {
-        infoText->setString("Left Click: Place " + elementName + " | Right Click: Clear | 1-5: Change Element | R: Reset");
+        infoText->setString("Element: " + elementName + " | Left Click: Place | Right Click: Clear | 1-5: Change Element | R: Reset | ESC: Quit");
         renderer.drawText(*infoText);
     }
     
@@ -132,10 +255,9 @@ int main() {
         
         LOG_INFO("Demo initialized, starting game loop...");
         
-        // Setup camera to match window size
-        sf::Vector2u windowSize = engine.getWindow().getSize();
+        // Setup camera to show the tile grid (40x30 tiles at 32px = 1280x960)
         Camera& cam = renderer.getCamera();
-        cam.setPosition(windowSize.x / 2.0f, windowSize.y / 2.0f);
+        cam.setPosition(640.0f, 480.0f);  // Center of 1280x960 grid
         renderer.setCamera(cam);
         
         // Set up callbacks

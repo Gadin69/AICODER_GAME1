@@ -24,8 +24,6 @@ struct Cell {
     }
 
     void updateColor() {
-        ElementProperties props = ElementTypes::getProperties(elementType);
-        
         switch (elementType) {
             case ElementType::Empty:
                 color = sf::Color::Transparent;
@@ -47,6 +45,9 @@ struct Cell {
                 break;
             case ElementType::ContaminatedWater:
                 color = sf::Color(100, 150, 100, 180);
+                break;
+            default:
+                color = sf::Color::Transparent;
                 break;
         }
     }
