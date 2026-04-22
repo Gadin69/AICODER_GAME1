@@ -1,10 +1,12 @@
 #include "core/Engine.h"
 #include "core/Logger.h"
+#include "core/Settings.h"
 #include "rendering/Renderer.h"
 #include "rendering/TileMap.h"
 #include "simulation/Grid.h"
 #include "simulation/SimulationManager.h"
 #include "simulation/ElementTypes.h"
+#include "ui/MainMenu.h"
 #include "ecs/Entity.h"
 #include <SFML/Graphics.hpp>
 
@@ -16,6 +18,16 @@ Renderer renderer;
 TileMap tileMap;
 Grid simGrid;
 SimulationManager simManager;
+MainMenu mainMenu;
+
+enum class GameState {
+    Menu,
+    Playing,
+    Paused,
+    Settings
+};
+GameState gameState = GameState::Menu;
+bool simulationInitialized = false;
 
 ElementType currentElement = ElementType::Liquid_Water;
 sf::Font font;
@@ -166,38 +178,48 @@ sf::Color getHeatMapColor(float temperature) {
 void initializeDemo() {
     if (DEBUG) LOG_INFO("Initializing demo");
     
-    // Initialize tile map (40x30 grid with 32px tiles)
-    tileMap.initialize(40, 30, 32.0f);
+    auto& settings = SettingsManager::getInstance().getSettings();
+    
+    // Initialize tile map with variable grid size from settings
+    tileMap.initialize(settings.gridWidth, settings.gridHeight, 32.0f);
     
     // Initialize simulation grid
-    simGrid.initialize(40, 30);
+    simGrid.initialize(settings.gridWidth, settings.gridHeight);
     simManager.initialize(simGrid);
     
     // Create some solid walls
     simGrid.lock();  // THREAD-SAFE: Lock before initialization
     
-    for (int x = 0; x < 40; ++x) {
+    for (int x = 0; x < settings.gridWidth; ++x) {
         simGrid.setCellType(x, 0, ElementType::Solid);
-        simGrid.setCellType(x, 29, ElementType::Solid);
+        simGrid.setCellType(x, settings.gridHeight - 1, ElementType::Solid);
     }
-    for (int y = 0; y < 30; ++y) {
+    for (int y = 0; y < settings.gridHeight; ++y) {
         simGrid.setCellType(0, y, ElementType::Solid);
-        simGrid.setCellType(39, y, ElementType::Solid);
+        simGrid.setCellType(settings.gridWidth - 1, y, ElementType::Solid);
     }
     
-    // Add some internal walls
-    for (int x = 10; x < 30; ++x) {
-        simGrid.setCellType(x, 15, ElementType::Solid);
+    // Add some internal walls (proportional to grid size)
+    int wallStartX = settings.gridWidth / 4;
+    int wallEndX = settings.gridWidth * 3 / 4;
+    int wallY = settings.gridHeight / 2;
+    for (int x = wallStartX; x < wallEndX; ++x) {
+        simGrid.setCellType(x, wallY, ElementType::Solid);
     }
-    simGrid.setCellType(15, 15, ElementType::Empty);
-    simGrid.setCellType(16, 15, ElementType::Empty);
-    simGrid.setCellType(17, 15, ElementType::Empty);
+    // Add gap in wall
+    simGrid.setCellType(wallStartX + 3, wallY, ElementType::Empty);
+    simGrid.setCellType(wallStartX + 4, wallY, ElementType::Empty);
+    simGrid.setCellType(wallStartX + 5, wallY, ElementType::Empty);
     
-    // Add some test water and gas
-    for (int x = 5; x < 10; ++x) {
-        simGrid.setCellType(x, 28, ElementType::Liquid_Water);
+    // Add some test water and gas (proportional to grid size)
+    int waterStartX = settings.gridWidth / 8;
+    int waterEndX = settings.gridWidth / 4;
+    for (int x = waterStartX; x < waterEndX; ++x) {
+        simGrid.setCellType(x, settings.gridHeight - 2, ElementType::Liquid_Water);
     }
-    for (int x = 30; x < 35; ++x) {
+    int gasStartX = settings.gridWidth * 3 / 4;
+    int gasEndX = settings.gridWidth * 7 / 8;
+    for (int x = gasStartX; x < gasEndX; ++x) {
         simGrid.setCellType(x, 5, ElementType::Gas_O2);
     }
     
@@ -211,6 +233,19 @@ void initializeDemo() {
     
     simGrid.unlock();  // UNLOCK after initialization
     
+    // Setup camera bounds to match grid
+    float gridWidthPx = settings.gridWidth * 32.0f;
+    float gridHeightPx = settings.gridHeight * 32.0f;
+    renderer.getCamera().setGridBounds(0, 0, gridWidthPx, gridHeightPx);
+    renderer.getCamera().setPosition(gridWidthPx / 2.0f, gridHeightPx / 2.0f);
+    renderer.getCamera().setScrollSpeed(settings.cameraScrollSpeed);
+    renderer.getCamera().setEdgeMargin(settings.cameraEdgeScrollMargin);
+    
+    simulationInitialized = true;
+    if (DEBUG) LOG_INFO("Demo initialized with grid: " + std::to_string(settings.gridWidth) + "x" + std::to_string(settings.gridHeight));
+}
+
+void initializeFonts() {
     // Load font
     if (!font.openFromFile("assets/fonts/arial.ttf")) {
         LOG_ERROR("Failed to load font!");

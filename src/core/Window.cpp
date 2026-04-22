@@ -16,17 +16,41 @@ void Window::create(const WindowConfig& windowConfig) {
     sf::ContextSettings settings;
     settings.antiAliasingLevel = config.antialiasing;
 
+    sf::State windowState;
+    sf::Vector2u windowSize(config.width, config.height);
+    
+    switch (config.displayMode) {
+        case DisplayMode::Fullscreen:
+            windowState = sf::State::Fullscreen;
+            break;
+        case DisplayMode::BorderlessWindowed:
+            windowState = sf::State::Windowed;
+            windowSize = sf::VideoMode::getDesktopMode().size;
+            break;
+        case DisplayMode::Windowed:
+        default:
+            windowState = sf::State::Windowed;
+            break;
+    }
+
     renderWindow.create(
-        sf::VideoMode(sf::Vector2u(config.width, config.height)),
+        sf::VideoMode(windowSize),
         config.title,
-        config.fullscreen ? sf::State::Fullscreen : sf::State::Windowed,
+        windowState,
         settings
     );
+    
+    // Position borderless window at (0,0)
+    if (config.displayMode == DisplayMode::BorderlessWindowed) {
+        renderWindow.setPosition(sf::Vector2i(0, 0));
+    }
 
     renderWindow.setVerticalSyncEnabled(config.vsync);
 
     isCreated = true;
-    LOG_INFO("Window created: " + std::to_string(config.width) + "x" + std::to_string(config.height));
+    LOG_INFO("Window created: " + std::to_string(config.width) + "x" + std::to_string(config.height) + 
+             " (" + (config.displayMode == DisplayMode::Fullscreen ? "Fullscreen" :
+                    config.displayMode == DisplayMode::BorderlessWindowed ? "Borderless" : "Windowed") + ")");
 }
 
 void Window::close() {
@@ -72,9 +96,31 @@ void Window::setVSync(bool enabled) {
 }
 
 void Window::setFullscreen(bool fullscreen) {
-    if (fullscreen != config.fullscreen) {
-        config.fullscreen = fullscreen;
+    if (fullscreen && config.displayMode != DisplayMode::Fullscreen) {
+        config.displayMode = DisplayMode::Fullscreen;
+        close();
+        create(config);
+    } else if (!fullscreen && config.displayMode == DisplayMode::Fullscreen) {
+        config.displayMode = DisplayMode::Windowed;
         close();
         create(config);
     }
+}
+
+void Window::setBorderless(bool borderless) {
+    if (borderless && config.displayMode != DisplayMode::BorderlessWindowed) {
+        config.displayMode = DisplayMode::BorderlessWindowed;
+        close();
+        create(config);
+    } else if (!borderless && config.displayMode == DisplayMode::BorderlessWindowed) {
+        config.displayMode = DisplayMode::Windowed;
+        close();
+        create(config);
+    }
+}
+
+void Window::applySettings(const WindowConfig& newConfig) {
+    config = newConfig;
+    close();
+    create(config);
 }

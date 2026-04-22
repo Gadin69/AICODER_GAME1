@@ -16,6 +16,7 @@ set(SOURCES
     src/core/Window.cpp
     src/core/Time.cpp
     src/core/Config.cpp
+    src/core/Settings.cpp
     src/ecs/Entity.cpp
     src/ecs/World.cpp
     src/rendering/Renderer.cpp
@@ -35,6 +36,7 @@ set(SOURCES
     src/systems/BuildingSystem.cpp
     src/systems/ResourceSystem.cpp
     src/systems/CraftingSystem.cpp
+    src/ui/MainMenu.cpp
 )
 
 # Header files
@@ -44,6 +46,7 @@ set(HEADERS
     src/core/Time.h
     src/core/Config.h
     src/core/Logger.h
+    src/core/Settings.h
     src/ecs/Entity.h
     src/ecs/Component.h
     src/ecs/System.h
@@ -69,6 +72,7 @@ set(HEADERS
     src/systems/BuildingSystem.h
     src/systems/ResourceSystem.h
     src/systems/CraftingSystem.h
+    src/ui/MainMenu.h
 )
 
 # Create executable

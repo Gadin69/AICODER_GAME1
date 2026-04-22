@@ -4,11 +4,17 @@
 #include <optional>
 #include <string>
 
+enum class DisplayMode {
+    Windowed,
+    Fullscreen,
+    BorderlessWindowed
+};
+
 struct WindowConfig {
     std::string title = "Game Engine";
     unsigned int width = 1280;
     unsigned int height = 720;
-    bool fullscreen = false;
+    DisplayMode displayMode = DisplayMode::Windowed;
     bool vsync = true;
     unsigned int antialiasing = 0;
 };
@@ -32,6 +38,8 @@ public:
 
     void setVSync(bool enabled);
     void setFullscreen(bool fullscreen);
+    void setBorderless(bool borderless);
+    void applySettings(const WindowConfig& newConfig);
 
 private:
     sf::RenderWindow renderWindow;
