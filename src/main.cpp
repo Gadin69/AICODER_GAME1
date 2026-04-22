@@ -8,7 +8,8 @@
 #include "ecs/Entity.h"
 #include <SFML/Graphics.hpp>
 
-#define DEBUG false  // Set to true to enable debug output
+#define DEBUG false  // Set to true to enable debug console output
+#define DEVELOPER_MODE true  // Set to true to enable admin/dev tools (sliders, overlays, etc.)
 
 // Global variables for demo
 Renderer renderer;
@@ -19,6 +20,105 @@ FluidSim fluidSim;
 ElementType currentElement = ElementType::Liquid_Water;
 sf::Font font;
 sf::Text* infoText = nullptr;
+
+// UI Slider for simulation time step
+struct UISlider {
+    sf::RectangleShape track;
+    sf::RectangleShape thumb;
+    sf::Text* label = nullptr;
+    sf::Text* valueText = nullptr;
+    sf::Font* fontPtr = nullptr;
+    float minValue;
+    float maxValue;
+    float currentValue;
+    bool isDragging = false;
+    bool initialized = false;
+    
+    void initialize(float x, float y, float width, float minVal, float maxVal, float defaultVal, const std::string& labelText, const sf::Font& font) {
+        minValue = minVal;
+        maxValue = maxVal;
+        currentValue = defaultVal;
+        fontPtr = const_cast<sf::Font*>(&font);
+        
+        // Track background
+        track.setSize(sf::Vector2f(width, 20));
+        track.setPosition(sf::Vector2f(x, y));
+        track.setFillColor(sf::Color(50, 50, 50));
+        track.setOutlineColor(sf::Color(100, 100, 100));
+        track.setOutlineThickness(2.0f);
+        
+        // Thumb (draggable part)
+        thumb.setSize(sf::Vector2f(15, 30));
+        updateThumbPosition();
+        thumb.setFillColor(sf::Color(100, 150, 255));
+        thumb.setOutlineColor(sf::Color(150, 200, 255));
+        thumb.setOutlineThickness(1.0f);
+        
+        // Label
+        label = new sf::Text(font, labelText, 16);
+        label->setFillColor(sf::Color::White);
+        label->setPosition(sf::Vector2f(x, y - 25));
+        
+        // Value text
+        valueText = new sf::Text(font, "", 14);
+        valueText->setFillColor(sf::Color(200, 200, 200));
+        valueText->setPosition(sf::Vector2f(x + width + 10, y - 2));
+        updateValueText();
+        
+        initialized = true;
+    }
+    
+    void updateThumbPosition() {
+        float ratio = (currentValue - minValue) / (maxValue - minValue);
+        float thumbX = track.getPosition().x + ratio * (track.getSize().x - thumb.getSize().x);
+        thumb.setPosition(sf::Vector2f(thumbX, track.getPosition().y - 5));
+    }
+    
+    void updateValueText() {
+        if (valueText) {
+            valueText->setString(std::to_string(currentValue).substr(0, 4) + "s");
+        }
+    }
+    
+    void handleMousePress(const sf::Vector2f& mousePos) {
+        sf::FloatRect thumbBounds = thumb.getGlobalBounds();
+        if (thumbBounds.contains(mousePos)) {
+            isDragging = true;
+        }
+    }
+    
+    void handleMouseRelease() {
+        isDragging = false;
+    }
+    
+    void handleMouseMove(const sf::Vector2f& mousePos) {
+        if (!isDragging) return;
+        
+        float trackLeft = track.getPosition().x;
+        float trackRight = track.getPosition().x + track.getSize().x;
+        
+        // Clamp mouse position to track bounds
+        float clampedX = std::max(trackLeft, std::min(trackRight, mousePos.x));
+        
+        // Calculate ratio and update value
+        float ratio = (clampedX - trackLeft) / (trackRight - trackLeft);
+        currentValue = minValue + ratio * (maxValue - minValue);
+        
+        updateThumbPosition();
+        updateValueText();
+    }
+    
+    void render(Renderer& renderer) {
+        if (!initialized) return;
+        renderer.drawRectangle(track);
+        renderer.drawRectangle(thumb);
+        if (label) renderer.drawText(*label);
+        if (valueText) renderer.drawText(*valueText);
+    }
+};
+
+UISlider* timeStepSlider = nullptr;
+bool isAdminMode = DEVELOPER_MODE;  // Auto-enabled if DEVELOPER_MODE is true
 
 // Forward declarations
 void syncTileMap();
@@ -74,6 +174,14 @@ void initializeDemo() {
     infoText = new sf::Text(font, "", 20);
     infoText->setFillColor(sf::Color::White);
     infoText->setPosition(sf::Vector2f(10, 10));
+    
+    // Initialize developer tools (only in DEVELOPER_MODE)
+#if DEVELOPER_MODE
+    if (isAdminMode) {
+        timeStepSlider = new UISlider();
+        timeStepSlider->initialize(10, 960, 300, 0.01f, 0.5f, 0.05f, "Sim Time Step:", font);
+    }
+#endif
     
     // Sync tilemap with simulation grid (do this LAST)
     // Simple version: just set walls manually
@@ -191,8 +299,18 @@ void syncTileMap() {
 }
 
 void updateSimulation(float deltaTime) {
+    // Update camera position for LOD simulation
+    sf::Vector2f camPos = renderer.getCamera().getPosition();
+    fluidSim.setCameraPosition((int)(camPos.x / 32), (int)(camPos.y / 32));
+    
+    // Apply admin time step override if in admin mode
+    float simDeltaTime = deltaTime;
+    if (isAdminMode && timeStepSlider) {
+        simDeltaTime = timeStepSlider->currentValue;
+    }
+    
     // Update fluid simulation
-    fluidSim.update(simGrid, deltaTime);
+    fluidSim.update(simGrid, simDeltaTime);
     
     // Sync tilemap with simulation grid for visualization
     syncTileMap();
@@ -220,8 +338,17 @@ void renderDemo() {
     // Draw info text
     std::string elementName = ElementTypes::getTypeName(currentElement);
     if (infoText) {
-        infoText->setString("Element: " + elementName + " | Left Click: Place | Right Click: Clear | 1-5: Change Element | R: Reset | ESC: Quit");
+        std::string info = "Element: " + elementName + " | Left Click: Place | Right Click: Clear | 1-5: Change Element | R: Reset | ESC: Quit";
+        if (isAdminMode) {
+            info += " | [ADMIN MODE]";
+        }
+        infoText->setString(info);
         renderer.drawText(*infoText);
+    }
+    
+    // Render admin UI (only in admin mode)
+    if (isAdminMode && timeStepSlider) {
+        timeStepSlider->render(renderer);
     }
     
     renderer.endFrame();
@@ -307,12 +434,34 @@ int main() {
                     simGrid.setCellType(16, 15, ElementType::Empty);
                     simGrid.setCellType(17, 15, ElementType::Empty);
                     break;
+#if DEVELOPER_MODE
+                case sf::Keyboard::Scancode::F1:  // Toggle admin mode (DEV ONLY)
+                    isAdminMode = !isAdminMode;
+                    break;
+#endif
                 case sf::Keyboard::Scancode::Escape:
                     engine.stop();
                     break;
                     }
                 }
             }
+            
+            // Handle slider input (developer mode only)
+#if DEVELOPER_MODE
+            if (isAdminMode && timeStepSlider) {
+                if (event.is<sf::Event::MouseButtonPressed>()) {
+                    sf::Vector2i mousePos = sf::Mouse::getPosition(renderer.getRenderWindow());
+                    timeStepSlider->handleMousePress(sf::Vector2f(mousePos.x, mousePos.y));
+                } else if (event.is<sf::Event::MouseButtonReleased>()) {
+                    timeStepSlider->handleMouseRelease();
+                } else if (event.is<sf::Event::MouseMoved>()) {
+                    auto mouseMove = event.getIf<sf::Event::MouseMoved>();
+                    if (mouseMove) {
+                        timeStepSlider->handleMouseMove(sf::Vector2f(mouseMove->position.x, mouseMove->position.y));
+                    }
+                }
+            }
+#endif
             
             handleMouseInput(event);
         };

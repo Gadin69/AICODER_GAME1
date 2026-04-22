@@ -3,6 +3,19 @@
 #include "ElementTypes.h"
 #include <SFML/Graphics.hpp>
 
+// Phase change temperature thresholds (Celsius)
+constexpr float SOLID_MELT_TEMP = 800.0f;    // Solid -> Liquid (rock melts)
+constexpr float WATER_FREEZE_TEMP = 0.0f;    // Water -> Ice (solid)
+constexpr float WATER_BOIL_TEMP = 100.0f;    // Water -> Steam (gas)
+constexpr float LAVA_COOL_TEMP = 500.0f;     // Lava -> Rock (solid)
+
+// Thermal properties (how much energy to change temperature)
+constexpr float LAVA_HEAT_CAPACITY = 0.8f;    // Lava holds heat well
+constexpr float WATER_HEAT_CAPACITY = 4.18f;  // Water has HIGH heat capacity
+constexpr float GAS_HEAT_CAPACITY = 1.0f;     // Gas has low heat capacity
+constexpr float SOLID_HEAT_CAPACITY = 2.0f;   // Solids have medium heat capacity
+constexpr float AMBIENT_TEMP = 20.0f;         // Room temperature
+
 struct Cell {
     ElementType elementType;
     float temperature;
@@ -11,6 +24,11 @@ struct Cell {
     float velocityY;
     bool updated;
     sf::Color color;
+    
+    // Phase transition tracking
+    ElementType targetElementType = ElementType::Empty;  // What we're transitioning to
+    float phaseTransitionProgress = 0.0f;  // 0.0 to 1.0 (0 = not started, 1 = complete)
+    float phaseTransitionSpeed = 0.0f;  // How fast the transition happens per tick
 
     Cell()
         : elementType(ElementType::Empty)
@@ -20,6 +38,9 @@ struct Cell {
         , velocityY(0.0f)
         , updated(false)
         , color(sf::Color::Transparent)
+        , targetElementType(ElementType::Empty)
+        , phaseTransitionProgress(0.0f)
+        , phaseTransitionSpeed(0.0f)
     {
     }
 

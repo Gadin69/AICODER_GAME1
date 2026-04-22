@@ -24,6 +24,7 @@ set(SOURCES
     src/rendering/Camera.cpp
     src/simulation/Grid.cpp
     src/simulation/FluidSim.cpp
+    src/simulation/HeatMap.cpp
     src/simulation/ElementTypes.cpp
     src/entities/Character.cpp
     src/entities/Building.cpp
@@ -51,6 +52,7 @@ set(HEADERS
     src/simulation/Grid.h
     src/simulation/Cell.h
     src/simulation/FluidSim.h
+    src/simulation/HeatMap.h
     src/simulation/ElementTypes.h
     src/entities/Character.h
     src/entities/Building.h
