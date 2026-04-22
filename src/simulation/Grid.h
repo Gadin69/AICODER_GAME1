@@ -2,6 +2,7 @@
 
 #include "Cell.h"
 #include <vector>
+#include <mutex>
 
 class Grid {
 public:
@@ -9,6 +10,7 @@ public:
 
     void initialize(int width, int height);
     
+    // Thread-safe cell access
     Cell& getCell(int x, int y);
     const Cell& getCell(int x, int y) const;
     
@@ -22,9 +24,26 @@ public:
     
     void clear();
     void fill(ElementType type);
+    
+    // DOUBLE-BUFFERING for thread-safe parallel simulation
+    void swapBuffers();  // Swap read/write buffers
+    Grid& getWriteBuffer();  // Get buffer for writing
+    const Grid& getReadBuffer() const;  // Get buffer for reading
+    
+    // Mutex for thread synchronization
+    std::mutex& getMutex() { return gridMutex; }
+    
+    // Thread-safe operations for main thread (mouse input, etc.)
+    void lock() { gridMutex.lock(); }
+    void unlock() { gridMutex.unlock(); }
 
 private:
     int width;
     int height;
     std::vector<std::vector<Cell>> cells;
+    
+    // Double buffering
+    std::vector<std::vector<Cell>> writeBuffer;  // Secondary buffer for parallel writes
+    int currentBuffer;  // 0 = cells is read buffer, 1 = writeBuffer is read buffer
+    std::mutex gridMutex;
 };

@@ -10,9 +10,17 @@ void Grid::initialize(int w, int h) {
     width = w;
     height = h;
     cells.resize(height);
+    writeBuffer.resize(height);
+    
     for (int y = 0; y < height; ++y) {
         cells[y].resize(width);
+        writeBuffer[y].resize(width);
     }
+    
+    currentBuffer = 0;
+    
+    // Fill entire grid with VACUUM (no empty space in universe!)
+    fill(ElementType::Vacuum);
 }
 
 Cell& Grid::getCell(int x, int y) {
@@ -49,11 +57,8 @@ bool Grid::isValidPosition(int x, int y) const {
 }
 
 void Grid::clear() {
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            cells[y][x] = Cell();
-        }
-    }
+    // Clear to VACUUM, not empty
+    fill(ElementType::Vacuum);
 }
 
 void Grid::fill(ElementType type) {
@@ -61,6 +66,23 @@ void Grid::fill(ElementType type) {
         for (int x = 0; x < width; ++x) {
             cells[y][x].elementType = type;
             cells[y][x].updateColor();
+            writeBuffer[y][x].elementType = type;
+            writeBuffer[y][x].updateColor();
         }
     }
+}
+
+void Grid::swapBuffers() {
+    // Swap the buffers (atomic pointer swap)
+    std::swap(cells, writeBuffer);
+    currentBuffer = 1 - currentBuffer;
+}
+
+Grid& Grid::getWriteBuffer() {
+    // Return the buffer that's NOT currently being read
+    return (currentBuffer == 0) ? *this : *this;  // Simplified for now
+}
+
+const Grid& Grid::getReadBuffer() const {
+    return *this;
 }

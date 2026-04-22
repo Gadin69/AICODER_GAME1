@@ -18,8 +18,10 @@ constexpr float AMBIENT_TEMP = 20.0f;         // Room temperature
 
 struct Cell {
     ElementType elementType;
+    float mass;            // kg - DYNAMIC mass (ONI-style: can be partial!)
     float temperature;
-    float pressure;
+    float pressure;        // Pascals (for gas cells)
+    float gasMass;         // kg of gas in this cell (for accumulation)
     float velocityX;
     float velocityY;
     bool updated;
@@ -31,13 +33,15 @@ struct Cell {
     float phaseTransitionSpeed = 0.0f;  // How fast the transition happens per tick
 
     Cell()
-        : elementType(ElementType::Empty)
-        , temperature(20.0f)
-        , pressure(1.0f)
+        : elementType(ElementType::Vacuum)  // Default is vacuum, not empty
+        , mass(0.0f)                        // No mass in vacuum
+        , temperature(-273.15f)             // Absolute zero in vacuum
+        , pressure(0.0f)                    // No pressure in vacuum
+        , gasMass(0.0f)
         , velocityX(0.0f)
         , velocityY(0.0f)
         , updated(false)
-        , color(sf::Color::Transparent)
+        , color(sf::Color(10, 10, 15))      // Vacuum color
         , targetElementType(ElementType::Empty)
         , phaseTransitionProgress(0.0f)
         , phaseTransitionSpeed(0.0f)
@@ -48,6 +52,9 @@ struct Cell {
         switch (elementType) {
             case ElementType::Empty:
                 color = sf::Color::Transparent;
+                break;
+            case ElementType::Vacuum:
+                color = sf::Color(10, 10, 15);  // Very dark, almost black
                 break;
             case ElementType::Solid:
                 color = sf::Color(128, 128, 128);

@@ -3,7 +3,7 @@
 #include "rendering/Renderer.h"
 #include "rendering/TileMap.h"
 #include "simulation/Grid.h"
-#include "simulation/FluidSim.h"
+#include "simulation/SimulationManager.h"
 #include "simulation/ElementTypes.h"
 #include "ecs/Entity.h"
 #include <SFML/Graphics.hpp>
@@ -15,7 +15,7 @@
 Renderer renderer;
 TileMap tileMap;
 Grid simGrid;
-FluidSim fluidSim;
+SimulationManager simManager;
 
 ElementType currentElement = ElementType::Liquid_Water;
 sf::Font font;
@@ -119,9 +119,49 @@ struct UISlider {
 
 UISlider* timeStepSlider = nullptr;
 bool isAdminMode = DEVELOPER_MODE;  // Auto-enabled if DEVELOPER_MODE is true
+bool showElementInspector = DEVELOPER_MODE;  // Toggle element inspection overlay
+sf::Text* inspectorText = nullptr;  // Hover inspection display
+
+// Map overlay toggles (F keys)
+bool showHeatMapOverlay = false;  // F3 - Temperature visualization
+bool showPhaseOverlay = false;    // F4 - Phase state visualization
+bool showDensityOverlay = false;  // F5 - Density visualization
 
 // Forward declarations
 void syncTileMap();
+void updateElementInspector();
+
+sf::Color getHeatMapColor(float temperature) {
+    // Color gradient: Blue (cold) -> Cyan -> Green -> Yellow -> Red (hot)
+    if (temperature < 0) {
+        // Very cold: Dark blue
+        return sf::Color(0, 0, 139);
+    } else if (temperature < 50) {
+        // Cold: Blue
+        float t = temperature / 50.0f;
+        return sf::Color(0, (uint8_t)(100 + t * 155), 255);
+    } else if (temperature < 100) {
+        // Cool: Cyan to Green
+        float t = (temperature - 50) / 50.0f;
+        return sf::Color(0, 255, (uint8_t)(255 - t * 255));
+    } else if (temperature < 300) {
+        // Warm: Green to Yellow
+        float t = (temperature - 100) / 200.0f;
+        return sf::Color((uint8_t)(t * 255), 255, 0);
+    } else if (temperature < 700) {
+        // Hot: Yellow to Orange
+        float t = (temperature - 300) / 400.0f;
+        return sf::Color(255, (uint8_t)(255 - t * 100), 0);
+    } else if (temperature < 1000) {
+        // Very hot: Orange to Red
+        float t = (temperature - 700) / 300.0f;
+        return sf::Color(255, (uint8_t)(155 - t * 155), 0);
+    } else {
+        // Extreme heat: Bright red to white
+        float t = std::min((temperature - 1000) / 200.0f, 1.0f);
+        return sf::Color(255, (uint8_t)(t * 255), (uint8_t)(t * 255));
+    }
+}
 
 void initializeDemo() {
     if (DEBUG) LOG_INFO("Initializing demo");
@@ -131,9 +171,11 @@ void initializeDemo() {
     
     // Initialize simulation grid
     simGrid.initialize(40, 30);
-    fluidSim.initialize(simGrid);
+    simManager.initialize(simGrid);
     
     // Create some solid walls
+    simGrid.lock();  // THREAD-SAFE: Lock before initialization
+    
     for (int x = 0; x < 40; ++x) {
         simGrid.setCellType(x, 0, ElementType::Solid);
         simGrid.setCellType(x, 29, ElementType::Solid);
@@ -167,6 +209,8 @@ void initializeDemo() {
         }
     }
     
+    simGrid.unlock();  // UNLOCK after initialization
+    
     // Load font
     if (!font.openFromFile("assets/fonts/arial.ttf")) {
         LOG_ERROR("Failed to load font!");
@@ -181,6 +225,11 @@ void initializeDemo() {
         timeStepSlider = new UISlider();
         timeStepSlider->initialize(10, 960, 300, 0.01f, 0.5f, 0.05f, "Sim Time Step:", font);
     }
+    
+    // Initialize element inspector text
+    inspectorText = new sf::Text(font, "", 14);
+    inspectorText->setFillColor(sf::Color::Yellow);
+    inspectorText->setPosition(sf::Vector2f(10, 50));
 #endif
     
     // Sync tilemap with simulation grid (do this LAST)
@@ -237,8 +286,20 @@ void handleMouseInput(const sf::Event& event) {
             
             if (simGrid.isValidPosition(tileX, tileY)) {
                 if (mouseButton->button == sf::Mouse::Button::Left) {
+                    // THREAD-SAFE: Lock grid before modifying cells
+                    simGrid.lock();
+                    
                     // Place element
                     simGrid.setCellType(tileX, tileY, currentElement);
+                    
+                    // Set properties from element (DATA-DRIVEN)
+                    Cell& placedCell = simGrid.getCell(tileX, tileY);
+                    ElementProperties props = ElementTypes::getElement(currentElement);
+                    placedCell.temperature = props.defaultTemperature;
+                    
+                    // ONI-STYLE: Set initial MASS (full cell by default)
+                    // Mass = density × volume (1m³ per cell)
+                    placedCell.mass = props.density;  // Full cell
                     
                     // Update tile directly
                     sf::Color color = sf::Color::Transparent;
@@ -258,6 +319,9 @@ void handleMouseInput(const sf::Event& event) {
                     } else if (currentElement == ElementType::Gas_CO2) {
                         color = sf::Color(100, 100, 100, 120);
                         name = "CO2";
+                    } else if (currentElement == ElementType::Vacuum) {
+                        color = sf::Color(10, 10, 15);
+                        name = "Vacuum";
                     }
                     
                     TileInfo tileInfo;
@@ -265,15 +329,26 @@ void handleMouseInput(const sf::Event& event) {
                     tileInfo.solid = (currentElement == ElementType::Solid);
                     tileInfo.name = name;
                     tileMap.setTile(tileX, tileY, tileInfo);
+                    
+                    // UNLOCK grid after modifications
+                    simGrid.unlock();
+                    
                     if (DEBUG) std::cout << "Placed " << name << " at (" << tileX << ", " << tileY << ")" << std::endl;
                 } else if (mouseButton->button == sf::Mouse::Button::Right) {
+                    // THREAD-SAFE: Lock grid before clearing cells
+                    simGrid.lock();
+                    
                     // Clear cell
                     simGrid.setCellType(tileX, tileY, ElementType::Empty);
+                    
                     TileInfo emptyTile;
                     emptyTile.color = sf::Color::Transparent;
                     emptyTile.solid = false;
                     emptyTile.name = "Empty";
                     tileMap.setTile(tileX, tileY, emptyTile);
+                    
+                    // UNLOCK grid
+                    simGrid.unlock();
                 }
             }
         }
@@ -284,36 +359,156 @@ void syncTileMap() {
     int height = simGrid.getHeight();
     int width = simGrid.getWidth();
     
+    // THREAD-SAFE: Lock grid before reading all cells
+    simGrid.lock();
+    
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             if (!simGrid.isValidPosition(x, y)) continue;
             
             const Cell& cell = simGrid.getCell(x, y);
             TileInfo tileInfo;
-            tileInfo.color = cell.color;
+            
+            // Apply overlay colors based on active visualization mode
+            if (showHeatMapOverlay) {
+                // Heat map: color by temperature
+                if (cell.elementType == ElementType::Empty) {
+                    tileInfo.color = sf::Color(20, 20, 20);  // Dark for empty
+                } else {
+                    tileInfo.color = getHeatMapColor(cell.temperature);
+                }
+            } else if (showPhaseOverlay) {
+                // Phase overlay: color by state
+                ElementProperties props = ElementTypes::getElement(cell.elementType);
+                if (cell.elementType == ElementType::Empty) {
+                    tileInfo.color = sf::Color(20, 20, 20);
+                } else if (props.isSolid) {
+                    tileInfo.color = sf::Color(100, 100, 255);  // Blue = Solid
+                } else if (props.isLiquid) {
+                    tileInfo.color = sf::Color(50, 200, 50);    // Green = Liquid
+                } else if (props.isGas) {
+                    tileInfo.color = sf::Color(255, 100, 50);   // Orange = Gas
+                }
+            } else if (showDensityOverlay) {
+                // Density overlay: color by density
+                ElementProperties props = ElementTypes::getElement(cell.elementType);
+                if (cell.elementType == ElementType::Empty) {
+                    tileInfo.color = sf::Color(20, 20, 20);
+                } else {
+                    // Map density to color (0-4000 kg/m³)
+                    float densityNorm = std::min(props.density / 4000.0f, 1.0f);
+                    tileInfo.color = sf::Color(
+                        (uint8_t)(densityNorm * 255),
+                        (uint8_t)((1.0f - densityNorm) * 255),
+                        50
+                    );
+                }
+            } else {
+                // Default: normal element colors
+                tileInfo.color = cell.color;
+            }
+            
             tileInfo.solid = (cell.elementType == ElementType::Solid);
             tileInfo.name = ElementTypes::getTypeName(cell.elementType);
             tileMap.setTile(x, y, tileInfo);
         }
     }
+    
+    // UNLOCK grid after reading all cells
+    simGrid.unlock();
+}
+
+void updateElementInspector() {
+#if DEVELOPER_MODE
+    if (!showElementInspector || !inspectorText) return;
+    
+    // Get mouse position
+    sf::Vector2i mousePos = sf::Mouse::getPosition(renderer.getRenderWindow());
+    int tileX = mousePos.x / 32;
+    int tileY = mousePos.y / 32;
+    
+    if (simGrid.isValidPosition(tileX, tileY)) {
+        // THREAD-SAFE: Lock grid before reading cell data
+        simGrid.lock();
+        
+        const Cell& cell = simGrid.getCell(tileX, tileY);
+        ElementProperties props = ElementTypes::getElement(cell.elementType);
+        
+        // Build inspection string with metric and imperial
+        std::string info = "Position: (" + std::to_string(tileX) + ", " + std::to_string(tileY) + ")\n";
+        info += "Element: " + props.name + "\n";
+        
+        // Temperature in Celsius and Fahrenheit
+        float tempF = (cell.temperature * 9.0f / 5.0f) + 32.0f;
+        info += "Temperature: " + std::to_string((int)cell.temperature) + "°C / " + std::to_string((int)tempF) + "°F\n";
+        
+        if (cell.elementType != ElementType::Empty) {
+            // Density in kg/m³ and lb/ft³
+            float densityImperial = props.density * 0.06243f;
+            info += "Density: " + std::to_string((int)props.density) + " kg/m³ / " + std::to_string((int)densityImperial) + " lb/ft³\n";
+            info += "Phase: ";
+            if (props.isSolid) info += "Solid";
+            else if (props.isLiquid) info += "Liquid";
+            else if (props.isGas) info += "Gas";
+            info += "\n";
+            
+            if (props.isLiquid || props.isSolid) {
+                float meltF = (props.meltingPoint * 9.0f / 5.0f) + 32.0f;
+                info += "Melting Point: " + std::to_string((int)props.meltingPoint) + "°C / " + std::to_string((int)meltF) + "°F\n";
+            }
+            if (props.isLiquid || props.isGas) {
+                float boilF = (props.boilingPoint * 9.0f / 5.0f) + 32.0f;
+                info += "Boiling Point: " + std::to_string((int)props.boilingPoint) + "°C / " + std::to_string((int)boilF) + "°F\n";
+            }
+            
+            // Thermal conductivity in W/(m·K) and BTU/(hr·ft·°F)
+            float kImperial = props.thermalConductivity * 0.5779f;
+            info += "Thermal Conductivity: " + std::to_string(props.thermalConductivity).substr(0, 4) + " W/(m·K) / " + 
+                    std::to_string(kImperial).substr(0, 4) + " BTU/(hr·ft·°F)\n";
+            
+            // Specific heat in J/(kg·K) and BTU/(lb·°F)
+            float cpImperial = props.specificHeatCapacity * 0.000238846f;
+            info += "Specific Heat: " + std::to_string((int)props.specificHeatCapacity) + " J/(kg·K) / " + 
+                    std::to_string(cpImperial).substr(0, 5) + " BTU/(lb·°F)";
+        }
+        
+        inspectorText->setString(info);
+        
+        // UNLOCK grid after reading
+        simGrid.unlock();
+        
+        // Position near mouse but not under it
+        float textX = mousePos.x + 20;
+        float textY = mousePos.y - 10;
+        
+        // Keep on screen
+        if (textX + 300 > 1280) textX = mousePos.x - 320;
+        if (textY + 200 > 720) textY = 720 - 200;
+        
+        inspectorText->setPosition(sf::Vector2f(textX, textY));
+    } else {
+        inspectorText->setString("");
+    }
+#endif
 }
 
 void updateSimulation(float deltaTime) {
-    // Update camera position for LOD simulation
-    sf::Vector2f camPos = renderer.getCamera().getPosition();
-    fluidSim.setCameraPosition((int)(camPos.x / 32), (int)(camPos.y / 32));
-    
     // Apply admin time step override if in admin mode
     float simDeltaTime = deltaTime;
     if (isAdminMode && timeStepSlider) {
         simDeltaTime = timeStepSlider->currentValue;
     }
     
-    // Update fluid simulation
-    fluidSim.update(simGrid, simDeltaTime);
+    // Update all simulation systems
+    simManager.update(simDeltaTime);
     
     // Sync tilemap with simulation grid for visualization
     syncTileMap();
+    
+    // Update element inspector (dev mode)
+#if DEVELOPER_MODE
+    updateElementInspector();
+#endif
 }
 
 void renderDemo() {
@@ -338,9 +533,16 @@ void renderDemo() {
     // Draw info text
     std::string elementName = ElementTypes::getTypeName(currentElement);
     if (infoText) {
-        std::string info = "Element: " + elementName + " | Left Click: Place | Right Click: Clear | 1-5: Change Element | R: Reset | ESC: Quit";
+        std::string info = "Element: " + elementName + " | Left Click: Place | Right Click: Clear | 1-6: Change Element | R: Reset | ESC: Quit";
         if (isAdminMode) {
-            info += " | [ADMIN MODE]";
+            info += " | [DEV MODE]";
+            if (showHeatMapOverlay) info += " F3:HeatMap";
+            if (showPhaseOverlay) info += " F4:Phase";
+            if (showDensityOverlay) info += " F5:Density";
+            if (!showHeatMapOverlay && !showPhaseOverlay && !showDensityOverlay) {
+                info += " F3-F5:Overlays";
+            }
+            info += " F1:ToggleUI F2:Inspector";
         }
         infoText->setString(info);
         renderer.drawText(*infoText);
@@ -350,6 +552,13 @@ void renderDemo() {
     if (isAdminMode && timeStepSlider) {
         timeStepSlider->render(renderer);
     }
+    
+    // Render element inspector (dev mode)
+#if DEVELOPER_MODE
+    if (showElementInspector && inspectorText) {
+        renderer.drawText(*inspectorText);
+    }
+#endif
     
     renderer.endFrame();
 }
@@ -416,7 +625,13 @@ int main() {
                 case sf::Keyboard::Scancode::Num5:
                     currentElement = ElementType::Solid;
                     break;
+                case sf::Keyboard::Scancode::Num6:
+                    currentElement = ElementType::Vacuum;
+                    break;
                 case sf::Keyboard::Scancode::R:
+                    // THREAD-SAFE: Lock grid before resetting
+                    simGrid.lock();
+                    
                     simGrid.clear();
                     // Rebuild walls
                     for (int x = 0; x < 40; ++x) {
@@ -433,10 +648,25 @@ int main() {
                     simGrid.setCellType(15, 15, ElementType::Empty);
                     simGrid.setCellType(16, 15, ElementType::Empty);
                     simGrid.setCellType(17, 15, ElementType::Empty);
+                    
+                    // UNLOCK grid
+                    simGrid.unlock();
                     break;
 #if DEVELOPER_MODE
                 case sf::Keyboard::Scancode::F1:  // Toggle admin mode (DEV ONLY)
                     isAdminMode = !isAdminMode;
+                    break;
+                case sf::Keyboard::Scancode::F2:  // Toggle element inspector
+                    showElementInspector = !showElementInspector;
+                    break;
+                case sf::Keyboard::Scancode::F3:  // Toggle heat map overlay
+                    showHeatMapOverlay = !showHeatMapOverlay;
+                    break;
+                case sf::Keyboard::Scancode::F4:  // Toggle phase overlay
+                    showPhaseOverlay = !showPhaseOverlay;
+                    break;
+                case sf::Keyboard::Scancode::F5:  // Toggle density overlay
+                    showDensityOverlay = !showDensityOverlay;
                     break;
 #endif
                 case sf::Keyboard::Scancode::Escape:
