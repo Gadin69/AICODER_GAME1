@@ -1,0 +1,31 @@
+# Build directories
+build/
+cmake-build-*/
+out/
+
+# IDE files
+.vs/
+.vscode/
+*.suo
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.cbp
+*.depend
+
+# Compiled files
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.o
+*.obj
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Assets (placeholder)
+assets/fonts/arial.ttf
