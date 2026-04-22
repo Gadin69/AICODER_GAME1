@@ -6,23 +6,13 @@
 #include <SFML/Graphics.hpp>
 #include <vector>
 #include <string>
-#include <functional>
 
-enum class MenuAction {
-    None,
-    Play,
-    Resume,
-    Settings,
-    Quit,
-    QuitToMain,
-    ApplySettings,
-    Back
-};
+enum class MenuAction; // Forward declaration
 
-class MainMenu {
+class SettingsMenu {
 public:
-    MainMenu();
-    ~MainMenu();
+    SettingsMenu();
+    ~SettingsMenu();
     
     void initialize(sf::RenderWindow& window);
     bool isInitialized() const;
@@ -36,26 +26,18 @@ private:
         sf::Text* text = nullptr;
         std::string label;
         bool isHovered = false;
-        bool isPressed = false;
         
-        // Default constructor
         Button() = default;
+        ~Button() { delete text; }
         
-        ~Button() {
-            delete text;
-        }
-        
-        // Move constructor
         Button(Button&& other) noexcept 
             : background(std::move(other.background)),
               text(other.text),
               label(std::move(other.label)),
-              isHovered(other.isHovered),
-              isPressed(other.isPressed) {
+              isHovered(other.isHovered) {
             other.text = nullptr;
         }
         
-        // Move assignment
         Button& operator=(Button&& other) noexcept {
             if (this != &other) {
                 delete text;
@@ -63,13 +45,11 @@ private:
                 text = other.text;
                 label = std::move(other.label);
                 isHovered = other.isHovered;
-                isPressed = other.isPressed;
                 other.text = nullptr;
             }
             return *this;
         }
         
-        // Delete copy constructor/assignment
         Button(const Button&) = delete;
         Button& operator=(const Button&) = delete;
     };
@@ -78,11 +58,26 @@ private:
     void renderButtons(Renderer& renderer);
     bool isMouseOverButton(const Button& btn, const sf::Vector2f& mousePos);
     void updateButtonHover(const sf::Vector2f& mousePos);
+    void updateButtonText(Button& btn);
     
     sf::Font font;
     sf::RenderWindow* window = nullptr;
     std::vector<Button> buttons;
     bool initialized = false;
+    
+    // Settings state
+    int selectedDisplayMode = 0;
+    int selectedResolution = 0;
+    bool vsyncEnabled = true;
+    int gridWidthInput = 80;
+    int gridHeightInput = 60;
+    
+    std::vector<std::pair<unsigned int, unsigned int>> resolutions = {
+        {1280, 720},
+        {1920, 1080},
+        {2560, 1440},
+        {3840, 2160}
+    };
     
     sf::Vector2f mousePos;
     sf::Vector2u lastWindowSize;  // Track window size to detect changes

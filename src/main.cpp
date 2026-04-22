@@ -7,6 +7,8 @@
 #include "simulation/SimulationManager.h"
 #include "simulation/ElementTypes.h"
 #include "ui/MainMenu.h"
+#include "ui/SettingsMenu.h"
+#include "ui/PauseMenu.h"
 #include "ecs/Entity.h"
 #include <SFML/Graphics.hpp>
 
@@ -19,6 +21,8 @@ TileMap tileMap;
 Grid simGrid;
 SimulationManager simManager;
 MainMenu mainMenu;
+SettingsMenu settingsMenu;
+PauseMenu pauseMenu;
 
 enum class GameState {
     Menu,
@@ -631,19 +635,20 @@ int main() {
         // Initialize renderer with engine window
         renderer.initialize(engine.getWindow().getRenderWindow());
         
-        // Initialize main menu
+        // Initialize menus
         try {
             mainMenu.initialize(renderer.getRenderWindow());
-            if (!mainMenu.isInitialized()) {
+            settingsMenu.initialize(renderer.getRenderWindow());
+            pauseMenu.initialize(renderer.getRenderWindow());
+            
+            if (!mainMenu.isInitialized() || !settingsMenu.isInitialized() || !pauseMenu.isInitialized()) {
                 std::cerr << "WARNING: Menu system failed to initialize, skipping to game" << std::endl;
                 gameState = GameState::Playing;
                 initializeDemo();
                 simulationInitialized = true;
-            } else {
-                mainMenu.setState(MenuState::Main);
             }
         } catch (const std::exception& e) {
-            std::cerr << "ERROR initializing menu: " << e.what() << std::endl;
+            std::cerr << "ERROR initializing menus: " << e.what() << std::endl;
             gameState = GameState::Playing;
             initializeDemo();
             simulationInitialized = true;
@@ -658,84 +663,60 @@ int main() {
         // Set up callbacks
         engine.onEvent = [&engine](const sf::Event& event) {
             // Route events based on game state
-            if (gameState == GameState::Menu || gameState == GameState::Paused || gameState == GameState::Settings) {
-                // Handle menu events
+            if (gameState == GameState::Menu) {
+                // Main menu
                 MenuAction action = mainMenu.handleEvent(event);
                 
-                if (action != MenuAction::None) {
-                    switch (action) {
-                        case MenuAction::Play:
-                        {
-                            // Start game from main menu
-                            gameState = GameState::Playing;
-                            if (!simulationInitialized) {
-                                initializeDemo();
-                                simulationInitialized = true;
-                            }
-                            break;
-                        }
-                            
-                        case MenuAction::Resume:
-                        {
-                            // Resume from pause
-                            gameState = GameState::Playing;
-                            break;
-                        }
-                            
-                        case MenuAction::Settings:
-                        {
-                            // Open settings (from main menu or pause)
-                            gameState = GameState::Settings;
-                            break;
-                        }
-                            
-                        case MenuAction::ApplySettings:
-                        {
-                            // Apply and save settings
-                            SettingsManager::getInstance().saveSettings();
-                            
-                            // Apply display settings
-                            auto& settings = SettingsManager::getInstance().getSettings();
-                            WindowConfig newConfig;
-                            newConfig.title = "ONI-like Game Engine";
-                            newConfig.width = settings.screenWidth;
-                            newConfig.height = settings.screenHeight;
-                            newConfig.displayMode = settings.displayMode;
-                            newConfig.vsync = settings.vsync;
-                            engine.getWindow().applySettings(newConfig);
-                            renderer.getRenderWindow().setVerticalSyncEnabled(settings.vsync);
-                            
-                            // Return to previous state
-                            if (simulationInitialized) {
-                                gameState = GameState::Paused;
-                            } else {
-                                gameState = GameState::Menu;
-                            }
-                            break;
-                        }
-                            
-                        case MenuAction::Back:
-                        {
-                            // Return to previous menu
-                            if (simulationInitialized) {
-                                gameState = GameState::Paused;
-                            } else {
-                                gameState = GameState::Menu;
-                            }
-                            break;
-                        }
-                            
-                        case MenuAction::Quit:
-                        case MenuAction::QuitToMain:
-                        {
-                            engine.stop();
-                            break;
-                        }
-                            
-                        case MenuAction::None:
-                        default:
-                            break;
+                if (action == MenuAction::Play) {
+                    gameState = GameState::Playing;
+                    if (!simulationInitialized) {
+                        initializeDemo();
+                        simulationInitialized = true;
                     }
+                } else if (action == MenuAction::Settings) {
+                    gameState = GameState::Settings;
+                } else if (action == MenuAction::Quit) {
+                    engine.stop();
+                }
+            } else if (gameState == GameState::Settings) {
+                // Settings menu
+                MenuAction action = settingsMenu.handleEvent(event);
+                
+                if (action == MenuAction::ApplySettings) {
+                    SettingsManager::getInstance().saveSettings();
+                    
+                    auto& settings = SettingsManager::getInstance().getSettings();
+                    WindowConfig newConfig;
+                    newConfig.title = "ONI-like Game Engine";
+                    newConfig.width = settings.screenWidth;
+                    newConfig.height = settings.screenHeight;
+                    newConfig.displayMode = settings.displayMode;
+                    newConfig.vsync = settings.vsync;
+                    engine.getWindow().applySettings(newConfig);
+                    renderer.getRenderWindow().setVerticalSyncEnabled(settings.vsync);
+                    
+                    if (simulationInitialized) {
+                        gameState = GameState::Paused;
+                    } else {
+                        gameState = GameState::Menu;
+                    }
+                } else if (action == MenuAction::Back) {
+                    if (simulationInitialized) {
+                        gameState = GameState::Paused;
+                    } else {
+                        gameState = GameState::Menu;
+                    }
+                }
+            } else if (gameState == GameState::Paused) {
+                // Pause menu
+                MenuAction action = pauseMenu.handleEvent(event);
+                
+                if (action == MenuAction::Resume) {
+                    gameState = GameState::Playing;
+                } else if (action == MenuAction::Settings) {
+                    gameState = GameState::Settings;
+                } else if (action == MenuAction::QuitToMain) {
+                    engine.stop();
                 }
             } else {
                 // GAME PLAYING STATE - handle game input
@@ -811,7 +792,6 @@ int main() {
                     case sf::Keyboard::Scancode::Escape:
                         // Pause game
                         gameState = GameState::Paused;
-                        mainMenu.setState(MenuState::Paused);
                         break;
                         }
                     }
@@ -879,29 +859,24 @@ int main() {
         
         engine.onRender = []() {
             try {
-                // Render based on game state
                 if (gameState == GameState::Menu) {
-                    // Render menu background (can add a static background here)
                     renderer.beginFrame();
                     mainMenu.render(renderer);
                     renderer.endFrame();
                 } else if (gameState == GameState::Playing) {
-                    // Render game
                     renderDemo();
                 } else if (gameState == GameState::Paused) {
-                    // Render game with pause overlay
                     renderDemo();
                     renderer.beginFrame();
-                    mainMenu.render(renderer);
+                    pauseMenu.render(renderer);
                     renderer.endFrame();
                 } else if (gameState == GameState::Settings) {
-                    // Render settings (with game or background)
                     if (simulationInitialized) {
                         renderDemo();
                     } else {
                         renderer.beginFrame();
                     }
-                    mainMenu.render(renderer);
+                    settingsMenu.render(renderer);
                     renderer.endFrame();
                 }
             } catch (const std::exception& e) {

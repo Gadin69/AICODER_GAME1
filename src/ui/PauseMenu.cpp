@@ -1,14 +1,14 @@
-#include "MainMenu.h"
+#include "PauseMenu.h"
+#include "MainMenu.h" // For MenuAction
 #include <iostream>
-#include <algorithm>
 
-MainMenu::MainMenu() {
+PauseMenu::PauseMenu() {
 }
 
-MainMenu::~MainMenu() {
+PauseMenu::~PauseMenu() {
 }
 
-void MainMenu::initialize(sf::RenderWindow& window) {
+void PauseMenu::initialize(sf::RenderWindow& window) {
     this->window = &window;
     
     if (!font.openFromFile("assets/fonts/arial.ttf")) {
@@ -20,11 +20,11 @@ void MainMenu::initialize(sf::RenderWindow& window) {
     buildMenu();
 }
 
-bool MainMenu::isInitialized() const {
+bool PauseMenu::isInitialized() const {
     return initialized;
 }
 
-void MainMenu::buildMenu() {
+void PauseMenu::buildMenu() {
     buttons.clear();
     
     if (!initialized) {
@@ -38,16 +38,14 @@ void MainMenu::buildMenu() {
     float windowWidth = static_cast<float>(windowSize.x);
     float windowHeight = static_cast<float>(windowSize.y);
     
-    // Scale UI elements based on window size
-    float buttonWidth = windowWidth * 0.25f;  // 25% of window width
-    float buttonHeight = windowHeight * 0.08f; // 8% of window height
+    // Scale UI elements
+    float buttonWidth = windowWidth * 0.25f;
+    float buttonHeight = windowHeight * 0.08f;
     float spacing = windowHeight * 0.03f;
     float startY = windowHeight / 2.0f - buttonHeight * 1.5f - spacing;
-    
-    std::vector<std::string> labels = {"Play", "Settings", "Quit"};
-    
-    // Scale font size based on window height
     unsigned int fontSize = static_cast<unsigned int>(windowHeight * 0.035f);
+    
+    std::vector<std::string> labels = {"Resume", "Settings", "Quit to Main"};
     
     for (size_t i = 0; i < labels.size(); ++i) {
         Button btn;
@@ -74,7 +72,7 @@ void MainMenu::buildMenu() {
     }
 }
 
-void MainMenu::render(Renderer& renderer) {
+void PauseMenu::render(Renderer& renderer) {
     if (!initialized) return;
     
     // Check if window size changed and rebuild menu if needed
@@ -89,21 +87,18 @@ void MainMenu::render(Renderer& renderer) {
     
     updateButtonHover(mousePos);
     
-    // Get actual window size
     sf::Vector2u windowSize = window->getSize();
     float windowWidth = static_cast<float>(windowSize.x);
     float windowHeight = static_cast<float>(windowSize.y);
     
-    // Render semi-transparent background
     sf::RectangleShape bgShape(sf::Vector2f(windowWidth, windowHeight));
-    bgShape.setFillColor(sf::Color(0, 0, 0, 180));
+    bgShape.setFillColor(sf::Color(0, 0, 0, 150));
     bgShape.setPosition(sf::Vector2f(0, 0));
     renderer.drawRectangle(bgShape);
     
-    // Render title - scale font based on window height
     unsigned int titleFontSize = static_cast<unsigned int>(windowHeight * 0.07f);
-    sf::Text title(font, "ONI-like Simulation", titleFontSize);
-    title.setFillColor(sf::Color(100, 200, 255));
+    sf::Text title(font, "PAUSED", titleFontSize);
+    title.setFillColor(sf::Color(255, 200, 100));
     auto titleBounds = title.getLocalBounds();
     title.setPosition(sf::Vector2f(
         (windowWidth - titleBounds.size.x) / 2.0f,
@@ -114,7 +109,7 @@ void MainMenu::render(Renderer& renderer) {
     renderButtons(renderer);
 }
 
-MenuAction MainMenu::handleEvent(const sf::Event& event) {
+MenuAction PauseMenu::handleEvent(const sf::Event& event) {
     if (!initialized) return MenuAction::None;
     
     if (event.is<sf::Event::MouseButtonPressed>()) {
@@ -125,12 +120,12 @@ MenuAction MainMenu::handleEvent(const sf::Event& event) {
             
             for (size_t i = 0; i < buttons.size(); ++i) {
                 if (isMouseOverButton(buttons[i], clickPos)) {
-                    if (buttons[i].label == "Play") {
-                        return MenuAction::Play;
+                    if (buttons[i].label == "Resume") {
+                        return MenuAction::Resume;
                     } else if (buttons[i].label == "Settings") {
                         return MenuAction::Settings;
-                    } else if (buttons[i].label == "Quit") {
-                        return MenuAction::Quit;
+                    } else if (buttons[i].label == "Quit to Main") {
+                        return MenuAction::QuitToMain;
                     }
                     break;
                 }
@@ -141,7 +136,7 @@ MenuAction MainMenu::handleEvent(const sf::Event& event) {
     return MenuAction::None;
 }
 
-void MainMenu::renderButtons(Renderer& renderer) {
+void PauseMenu::renderButtons(Renderer& renderer) {
     for (auto& btn : buttons) {
         if (btn.isHovered) {
             btn.background.setFillColor(sf::Color(80, 80, 80));
@@ -154,14 +149,14 @@ void MainMenu::renderButtons(Renderer& renderer) {
     }
 }
 
-bool MainMenu::isMouseOverButton(const Button& btn, const sf::Vector2f& mousePos) {
+bool PauseMenu::isMouseOverButton(const Button& btn, const sf::Vector2f& mousePos) {
     sf::Vector2f pos = btn.background.getPosition();
     sf::Vector2f size = btn.background.getSize();
     return mousePos.x >= pos.x && mousePos.x <= pos.x + size.x &&
            mousePos.y >= pos.y && mousePos.y <= pos.y + size.y;
 }
 
-void MainMenu::updateButtonHover(const sf::Vector2f& mousePos) {
+void PauseMenu::updateButtonHover(const sf::Vector2f& mousePos) {
     for (auto& btn : buttons) {
         btn.isHovered = isMouseOverButton(btn, mousePos);
     }

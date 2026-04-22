@@ -37,6 +37,8 @@ set(SOURCES
     src/systems/ResourceSystem.cpp
     src/systems/CraftingSystem.cpp
     src/ui/MainMenu.cpp
+    src/ui/SettingsMenu.cpp
+    src/ui/PauseMenu.cpp
 )
 
 # Header files
@@ -73,6 +75,8 @@ set(HEADERS
     src/systems/ResourceSystem.h
     src/systems/CraftingSystem.h
     src/ui/MainMenu.h
+    src/ui/SettingsMenu.h
+    src/ui/PauseMenu.h
 )
 
 # Create executable
