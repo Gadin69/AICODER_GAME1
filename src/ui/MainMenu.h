@@ -29,12 +29,12 @@ class MainMenu {
 public:
     MainMenu();
     
-    void initialize(sf::Font& font);
+    void initialize(sf::RenderWindow& window);
     MenuState getState() const;
     void setState(MenuState state);
     
-    MenuAction render(Renderer& renderer, Window& window);
-    void handleEvent(const sf::Event& event);
+    void render(Renderer& renderer);
+    MenuAction handleEvent(const sf::Event& event);
     
     void setPaused(bool paused);
     bool isInitialized() const;
@@ -47,9 +47,40 @@ private:
         bool isHovered = false;
         bool isPressed = false;
         
+        // Default constructor
+        Button() = default;
+        
         ~Button() {
             delete text;
         }
+        
+        // Move constructor
+        Button(Button&& other) noexcept 
+            : background(std::move(other.background)),
+              text(other.text),
+              label(std::move(other.label)),
+              isHovered(other.isHovered),
+              isPressed(other.isPressed) {
+            other.text = nullptr;  // Prevent double-free
+        }
+        
+        // Move assignment
+        Button& operator=(Button&& other) noexcept {
+            if (this != &other) {
+                delete text;  // Clean up current text
+                background = std::move(other.background);
+                text = other.text;
+                label = std::move(other.label);
+                isHovered = other.isHovered;
+                isPressed = other.isPressed;
+                other.text = nullptr;  // Prevent double-free
+            }
+            return *this;
+        }
+        
+        // Delete copy constructor/assignment to prevent accidental copies
+        Button(const Button&) = delete;
+        Button& operator=(const Button&) = delete;
     };
     
     struct Slider {
@@ -77,7 +108,8 @@ private:
     MenuState currentState = MenuState::Main;
     bool initialized = false;
     
-    sf::Font* font = nullptr;
+    sf::Font font;
+    sf::RenderWindow* window = nullptr;
     std::vector<Button> buttons;
     std::vector<Slider> sliders;
     

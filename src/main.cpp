@@ -608,15 +608,20 @@ int main() {
         if (DEBUG) std::cout << "=== Game Engine Starting ===" << std::endl;
         if (DEBUG) LOG_INFO("Starting Game Engine");
         
+        // Load settings
+        SettingsManager::getInstance().loadSettings();
+        auto& settings = SettingsManager::getInstance().getSettings();
+        
         // Create engine
         Engine engine;
         
-        // Configure window
+        // Configure window from settings
         WindowConfig config;
         config.title = "ONI-like Game Engine";
-        config.width = 1280;
-        config.height = 720;
-        config.vsync = true;
+        config.width = settings.screenWidth;
+        config.height = settings.screenHeight;
+        config.displayMode = settings.displayMode;
+        config.vsync = settings.vsync;
         
         // Initialize engine
         engine.initialize(config);
@@ -626,118 +631,279 @@ int main() {
         // Initialize renderer with engine window
         renderer.initialize(engine.getWindow().getRenderWindow());
         
-        if (DEBUG) LOG_INFO("Renderer initialized, setting up demo...");
+        // Initialize main menu
+        try {
+            mainMenu.initialize(renderer.getRenderWindow());
+            if (!mainMenu.isInitialized()) {
+                std::cerr << "WARNING: Menu system failed to initialize, skipping to game" << std::endl;
+                gameState = GameState::Playing;
+                initializeDemo();
+                simulationInitialized = true;
+            } else {
+                mainMenu.setState(MenuState::Main);
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "ERROR initializing menu: " << e.what() << std::endl;
+            gameState = GameState::Playing;
+            initializeDemo();
+            simulationInitialized = true;
+        }
         
-        // Initialize demo
-        initializeDemo();
+        if (DEBUG) LOG_INFO("Renderer and menu initialized, starting game loop...");
         
-        if (DEBUG) LOG_INFO("Demo initialized, starting game loop...");
-        
-        // Setup camera to show the tile grid (40x30 tiles at 32px = 1280x960)
-        Camera& cam = renderer.getCamera();
-        cam.setPosition(640.0f, 480.0f);  // Center of 1280x960 grid
-        renderer.setCamera(cam);
+        // Game state starts at Menu
+        gameState = GameState::Menu;
+        simulationInitialized = false;
         
         // Set up callbacks
         engine.onEvent = [&engine](const sf::Event& event) {
-            // Handle keyboard input
-            if (event.is<sf::Event::KeyPressed>()) {
-                auto keyEvent = event.getIf<sf::Event::KeyPressed>();
-                if (keyEvent) {
-                    switch (keyEvent->scancode) {
-                case sf::Keyboard::Scancode::Num1:
-                    currentElement = ElementType::Liquid_Water;
-                    break;
-                case sf::Keyboard::Scancode::Num2:
-                    currentElement = ElementType::Liquid_Lava;
-                    break;
-                case sf::Keyboard::Scancode::Num3:
-                    currentElement = ElementType::Gas_O2;
-                    break;
-                case sf::Keyboard::Scancode::Num4:
-                    currentElement = ElementType::Gas_CO2;
-                    break;
-                case sf::Keyboard::Scancode::Num5:
-                    currentElement = ElementType::Solid;
-                    break;
-                case sf::Keyboard::Scancode::Num6:
-                    currentElement = ElementType::Vacuum;
-                    break;
-                case sf::Keyboard::Scancode::R:
-                    // THREAD-SAFE: Lock grid before resetting
-                    simGrid.lock();
-                    
-                    simGrid.clear();
-                    // Rebuild walls
-                    for (int x = 0; x < 40; ++x) {
-                        simGrid.setCellType(x, 0, ElementType::Solid);
-                        simGrid.setCellType(x, 29, ElementType::Solid);
-                    }
-                    for (int y = 0; y < 30; ++y) {
-                        simGrid.setCellType(0, y, ElementType::Solid);
-                        simGrid.setCellType(39, y, ElementType::Solid);
-                    }
-                    for (int x = 10; x < 30; ++x) {
-                        simGrid.setCellType(x, 15, ElementType::Solid);
-                    }
-                    simGrid.setCellType(15, 15, ElementType::Empty);
-                    simGrid.setCellType(16, 15, ElementType::Empty);
-                    simGrid.setCellType(17, 15, ElementType::Empty);
-                    
-                    // UNLOCK grid
-                    simGrid.unlock();
-                    break;
-#if DEVELOPER_MODE
-                case sf::Keyboard::Scancode::F1:  // Toggle admin mode (DEV ONLY)
-                    isAdminMode = !isAdminMode;
-                    break;
-                case sf::Keyboard::Scancode::F2:  // Toggle element inspector
-                    showElementInspector = !showElementInspector;
-                    break;
-                case sf::Keyboard::Scancode::F3:  // Toggle heat map overlay
-                    showHeatMapOverlay = !showHeatMapOverlay;
-                    break;
-                case sf::Keyboard::Scancode::F4:  // Toggle phase overlay
-                    showPhaseOverlay = !showPhaseOverlay;
-                    break;
-                case sf::Keyboard::Scancode::F5:  // Toggle density overlay
-                    showDensityOverlay = !showDensityOverlay;
-                    break;
-#endif
-                case sf::Keyboard::Scancode::Escape:
-                    engine.stop();
-                    break;
-                    }
-                }
-            }
-            
-            // Handle slider input (developer mode only)
-#if DEVELOPER_MODE
-            if (isAdminMode && timeStepSlider) {
-                if (event.is<sf::Event::MouseButtonPressed>()) {
-                    sf::Vector2i mousePos = sf::Mouse::getPosition(renderer.getRenderWindow());
-                    timeStepSlider->handleMousePress(sf::Vector2f(mousePos.x, mousePos.y));
-                } else if (event.is<sf::Event::MouseButtonReleased>()) {
-                    timeStepSlider->handleMouseRelease();
-                } else if (event.is<sf::Event::MouseMoved>()) {
-                    auto mouseMove = event.getIf<sf::Event::MouseMoved>();
-                    if (mouseMove) {
-                        timeStepSlider->handleMouseMove(sf::Vector2f(mouseMove->position.x, mouseMove->position.y));
+            // Route events based on game state
+            if (gameState == GameState::Menu || gameState == GameState::Paused || gameState == GameState::Settings) {
+                // Handle menu events
+                MenuAction action = mainMenu.handleEvent(event);
+                
+                if (action != MenuAction::None) {
+                    switch (action) {
+                        case MenuAction::Play:
+                        {
+                            // Start game from main menu
+                            gameState = GameState::Playing;
+                            if (!simulationInitialized) {
+                                initializeDemo();
+                                simulationInitialized = true;
+                            }
+                            break;
+                        }
+                            
+                        case MenuAction::Resume:
+                        {
+                            // Resume from pause
+                            gameState = GameState::Playing;
+                            break;
+                        }
+                            
+                        case MenuAction::Settings:
+                        {
+                            // Open settings (from main menu or pause)
+                            gameState = GameState::Settings;
+                            break;
+                        }
+                            
+                        case MenuAction::ApplySettings:
+                        {
+                            // Apply and save settings
+                            SettingsManager::getInstance().saveSettings();
+                            
+                            // Apply display settings
+                            auto& settings = SettingsManager::getInstance().getSettings();
+                            WindowConfig newConfig;
+                            newConfig.title = "ONI-like Game Engine";
+                            newConfig.width = settings.screenWidth;
+                            newConfig.height = settings.screenHeight;
+                            newConfig.displayMode = settings.displayMode;
+                            newConfig.vsync = settings.vsync;
+                            engine.getWindow().applySettings(newConfig);
+                            renderer.getRenderWindow().setVerticalSyncEnabled(settings.vsync);
+                            
+                            // Return to previous state
+                            if (simulationInitialized) {
+                                gameState = GameState::Paused;
+                            } else {
+                                gameState = GameState::Menu;
+                            }
+                            break;
+                        }
+                            
+                        case MenuAction::Back:
+                        {
+                            // Return to previous menu
+                            if (simulationInitialized) {
+                                gameState = GameState::Paused;
+                            } else {
+                                gameState = GameState::Menu;
+                            }
+                            break;
+                        }
+                            
+                        case MenuAction::Quit:
+                        case MenuAction::QuitToMain:
+                        {
+                            engine.stop();
+                            break;
+                        }
+                            
+                        case MenuAction::None:
+                        default:
+                            break;
                     }
                 }
-            }
+            } else {
+                // GAME PLAYING STATE - handle game input
+                
+                // Handle keyboard input
+                if (event.is<sf::Event::KeyPressed>()) {
+                    auto keyEvent = event.getIf<sf::Event::KeyPressed>();
+                    if (keyEvent) {
+                        switch (keyEvent->scancode) {
+                    case sf::Keyboard::Scancode::Num1:
+                        currentElement = ElementType::Liquid_Water;
+                        break;
+                    case sf::Keyboard::Scancode::Num2:
+                        currentElement = ElementType::Liquid_Lava;
+                        break;
+                    case sf::Keyboard::Scancode::Num3:
+                        currentElement = ElementType::Gas_O2;
+                        break;
+                    case sf::Keyboard::Scancode::Num4:
+                        currentElement = ElementType::Gas_CO2;
+                        break;
+                    case sf::Keyboard::Scancode::Num5:
+                        currentElement = ElementType::Solid;
+                        break;
+                    case sf::Keyboard::Scancode::Num6:
+                        currentElement = ElementType::Vacuum;
+                        break;
+                    case sf::Keyboard::Scancode::R:
+                    {
+                        // THREAD-SAFE: Lock grid before resetting
+                        simGrid.lock();
+                        
+                        simGrid.clear();
+                        // Rebuild walls
+                        auto& settings = SettingsManager::getInstance().getSettings();
+                        for (int x = 0; x < settings.gridWidth; ++x) {
+                            simGrid.setCellType(x, 0, ElementType::Solid);
+                            simGrid.setCellType(x, settings.gridHeight - 1, ElementType::Solid);
+                        }
+                        for (int y = 0; y < settings.gridHeight; ++y) {
+                            simGrid.setCellType(0, y, ElementType::Solid);
+                            simGrid.setCellType(settings.gridWidth - 1, y, ElementType::Solid);
+                        }
+                        for (int x = settings.gridWidth / 4; x < 3 * settings.gridWidth / 4; ++x) {
+                            simGrid.setCellType(x, settings.gridHeight / 2, ElementType::Solid);
+                        }
+                        int doorX = settings.gridWidth / 2;
+                        simGrid.setCellType(doorX, settings.gridHeight / 2, ElementType::Empty);
+                        simGrid.setCellType(doorX + 1, settings.gridHeight / 2, ElementType::Empty);
+                        simGrid.setCellType(doorX - 1, settings.gridHeight / 2, ElementType::Empty);
+                        
+                        // UNLOCK grid
+                        simGrid.unlock();
+                        break;
+                    }
+#if DEVELOPER_MODE
+                    case sf::Keyboard::Scancode::F1:  // Toggle admin mode (DEV ONLY)
+                        isAdminMode = !isAdminMode;
+                        break;
+                    case sf::Keyboard::Scancode::F2:  // Toggle element inspector
+                        showElementInspector = !showElementInspector;
+                        break;
+                    case sf::Keyboard::Scancode::F3:  // Toggle heat map overlay
+                        showHeatMapOverlay = !showHeatMapOverlay;
+                        break;
+                    case sf::Keyboard::Scancode::F4:  // Toggle phase overlay
+                        showPhaseOverlay = !showPhaseOverlay;
+                        break;
+                    case sf::Keyboard::Scancode::F5:  // Toggle density overlay
+                        showDensityOverlay = !showDensityOverlay;
+                        break;
 #endif
-            
-            handleMouseInput(event);
+                    case sf::Keyboard::Scancode::Escape:
+                        // Pause game
+                        gameState = GameState::Paused;
+                        mainMenu.setState(MenuState::Paused);
+                        break;
+                        }
+                    }
+                }
+                
+                // Handle slider input (developer mode only)
+#if DEVELOPER_MODE
+                if (isAdminMode && timeStepSlider) {
+                    if (event.is<sf::Event::MouseButtonPressed>()) {
+                        sf::Vector2i mousePos = sf::Mouse::getPosition(renderer.getRenderWindow());
+                        timeStepSlider->handleMousePress(sf::Vector2f(mousePos.x, mousePos.y));
+                    } else if (event.is<sf::Event::MouseButtonReleased>()) {
+                        timeStepSlider->handleMouseRelease();
+                    } else if (event.is<sf::Event::MouseMoved>()) {
+                        auto mouseMove = event.getIf<sf::Event::MouseMoved>();
+                        if (mouseMove) {
+                            timeStepSlider->handleMouseMove(sf::Vector2f(mouseMove->position.x, mouseMove->position.y));
+                        }
+                    }
+                }
+#endif
+                
+                handleMouseInput(event);
+            }
         };
         
         engine.onUpdate = [&engine](void) {
-            updateSimulation(engine.getTime().getDeltaTime());
+            float deltaTime = engine.getTime().getDeltaTime();
+            
+            // Update camera smooth scrolling
+            if (gameState == GameState::Playing) {
+                renderer.getCamera().update(deltaTime);
+                
+                // Handle arrow keys for camera
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Scancode::Up)) {
+                    renderer.getCamera().handleArrowKeys(sf::Keyboard::Scancode::Up, true);
+                } else {
+                    renderer.getCamera().handleArrowKeys(sf::Keyboard::Scancode::Up, false);
+                }
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Scancode::Down)) {
+                    renderer.getCamera().handleArrowKeys(sf::Keyboard::Scancode::Down, true);
+                } else {
+                    renderer.getCamera().handleArrowKeys(sf::Keyboard::Scancode::Down, false);
+                }
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Scancode::Left)) {
+                    renderer.getCamera().handleArrowKeys(sf::Keyboard::Scancode::Left, true);
+                } else {
+                    renderer.getCamera().handleArrowKeys(sf::Keyboard::Scancode::Left, false);
+                }
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Scancode::Right)) {
+                    renderer.getCamera().handleArrowKeys(sf::Keyboard::Scancode::Right, true);
+                } else {
+                    renderer.getCamera().handleArrowKeys(sf::Keyboard::Scancode::Right, false);
+                }
+                
+                // Handle mouse edge scrolling
+                sf::Vector2i mousePos = sf::Mouse::getPosition(renderer.getRenderWindow());
+                sf::Vector2u windowSize = renderer.getRenderWindow().getSize();
+                renderer.getCamera().handleMouseEdge(sf::Vector2f(mousePos.x, mousePos.y), windowSize);
+                
+                // Update simulation
+                updateSimulation(deltaTime);
+            }
         };
         
         engine.onRender = []() {
             try {
-                renderDemo();
+                // Render based on game state
+                if (gameState == GameState::Menu) {
+                    // Render menu background (can add a static background here)
+                    renderer.beginFrame();
+                    mainMenu.render(renderer);
+                    renderer.endFrame();
+                } else if (gameState == GameState::Playing) {
+                    // Render game
+                    renderDemo();
+                } else if (gameState == GameState::Paused) {
+                    // Render game with pause overlay
+                    renderDemo();
+                    renderer.beginFrame();
+                    mainMenu.render(renderer);
+                    renderer.endFrame();
+                } else if (gameState == GameState::Settings) {
+                    // Render settings (with game or background)
+                    if (simulationInitialized) {
+                        renderDemo();
+                    } else {
+                        renderer.beginFrame();
+                    }
+                    mainMenu.render(renderer);
+                    renderer.endFrame();
+                }
             } catch (const std::exception& e) {
                 LOG_ERROR(std::string("Render error: ") + e.what());
             }

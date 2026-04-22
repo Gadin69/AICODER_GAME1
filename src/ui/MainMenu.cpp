@@ -5,8 +5,18 @@
 MainMenu::MainMenu() {
 }
 
-void MainMenu::initialize(sf::Font& font) {
-    this->font = &font;
+void MainMenu::initialize(sf::RenderWindow& window) {
+    // Store window pointer for mouse position
+    this->window = &window;
+    
+    // Load font
+    if (!font.openFromFile("assets/fonts/arial.ttf")) {
+        std::cerr << "ERROR: Failed to load font 'assets/fonts/arial.ttf'" << std::endl;
+        std::cerr << "Menu system will not function properly" << std::endl;
+        // Don't set initialized to true if font fails
+        return;
+    }
+    
     initialized = true;
     buildMainMenu();
 }
@@ -44,6 +54,12 @@ void MainMenu::buildMainMenu() {
     buttons.clear();
     sliders.clear();
     
+    // Safety check: ensure font is loaded
+    if (!initialized) {
+        std::cerr << "ERROR: buildMainMenu called but menu not initialized" << std::endl;
+        return;
+    }
+    
     float windowWidth = 1280.0f;
     float windowHeight = 720.0f;
     float buttonWidth = 300.0f;
@@ -65,7 +81,7 @@ void MainMenu::buildMainMenu() {
         btn.background.setOutlineColor(sf::Color(100, 100, 100));
         btn.background.setOutlineThickness(2.0f);
         
-        btn.text = new sf::Text(*font, labels[i], 24);
+        btn.text = new sf::Text(font, labels[i], 24);
         btn.text->setFillColor(sf::Color::White);
         
         auto textBounds = btn.text->getLocalBounds();
@@ -114,7 +130,7 @@ void MainMenu::buildSettingsMenu() {
     displayBtn.background.setFillColor(sf::Color(50, 50, 50));
     displayBtn.background.setOutlineColor(sf::Color(100, 100, 100));
     displayBtn.background.setOutlineThickness(2.0f);
-    displayBtn.text = new sf::Text(*font, displayBtn.label, 20);
+    displayBtn.text = new sf::Text(font, displayBtn.label, 20);
     displayBtn.text->setFillColor(sf::Color::White);
     auto txtBounds = displayBtn.text->getLocalBounds();
     displayBtn.text->setPosition(sf::Vector2f(
@@ -132,7 +148,7 @@ void MainMenu::buildSettingsMenu() {
     resBtn.background.setFillColor(sf::Color(50, 50, 50));
     resBtn.background.setOutlineColor(sf::Color(100, 100, 100));
     resBtn.background.setOutlineThickness(2.0f);
-    resBtn.text = new sf::Text(*font, resBtn.label, 20);
+    resBtn.text = new sf::Text(font, resBtn.label, 20);
     resBtn.text->setFillColor(sf::Color::White);
     auto resTxtBounds = resBtn.text->getLocalBounds();
     resBtn.text->setPosition(sf::Vector2f(
@@ -149,7 +165,7 @@ void MainMenu::buildSettingsMenu() {
     vsyncBtn.background.setFillColor(sf::Color(50, 50, 50));
     vsyncBtn.background.setOutlineColor(sf::Color(100, 100, 100));
     vsyncBtn.background.setOutlineThickness(2.0f);
-    vsyncBtn.text = new sf::Text(*font, vsyncBtn.label, 20);
+    vsyncBtn.text = new sf::Text(font, vsyncBtn.label, 20);
     vsyncBtn.text->setFillColor(sf::Color::White);
     auto vsyncTxtBounds = vsyncBtn.text->getLocalBounds();
     vsyncBtn.text->setPosition(sf::Vector2f(
@@ -166,7 +182,7 @@ void MainMenu::buildSettingsMenu() {
     gridWBtn.background.setFillColor(sf::Color(50, 50, 50));
     gridWBtn.background.setOutlineColor(sf::Color(100, 100, 100));
     gridWBtn.background.setOutlineThickness(2.0f);
-    gridWBtn.text = new sf::Text(*font, gridWBtn.label, 20);
+    gridWBtn.text = new sf::Text(font, gridWBtn.label, 20);
     gridWBtn.text->setFillColor(sf::Color::White);
     auto gridWTxtBounds = gridWBtn.text->getLocalBounds();
     gridWBtn.text->setPosition(sf::Vector2f(
@@ -183,7 +199,7 @@ void MainMenu::buildSettingsMenu() {
     gridHBtn.background.setFillColor(sf::Color(50, 50, 50));
     gridHBtn.background.setOutlineColor(sf::Color(100, 100, 100));
     gridHBtn.background.setOutlineThickness(2.0f);
-    gridHBtn.text = new sf::Text(*font, gridHBtn.label, 20);
+    gridHBtn.text = new sf::Text(font, gridHBtn.label, 20);
     gridHBtn.text->setFillColor(sf::Color::White);
     auto gridHTxtBounds = gridHBtn.text->getLocalBounds();
     gridHBtn.text->setPosition(sf::Vector2f(
@@ -200,7 +216,7 @@ void MainMenu::buildSettingsMenu() {
     applyBtn.background.setFillColor(sf::Color(40, 120, 40));
     applyBtn.background.setOutlineColor(sf::Color(60, 180, 60));
     applyBtn.background.setOutlineThickness(2.0f);
-    applyBtn.text = new sf::Text(*font, "Apply", 20);
+    applyBtn.text = new sf::Text(font, "Apply", 20);
     applyBtn.text->setFillColor(sf::Color::White);
     auto applyTxtBounds = applyBtn.text->getLocalBounds();
     applyBtn.text->setPosition(sf::Vector2f(
@@ -217,7 +233,7 @@ void MainMenu::buildSettingsMenu() {
     backBtn.background.setFillColor(sf::Color(120, 40, 40));
     backBtn.background.setOutlineColor(sf::Color(180, 60, 60));
     backBtn.background.setOutlineThickness(2.0f);
-    backBtn.text = new sf::Text(*font, "Back", 20);
+    backBtn.text = new sf::Text(font, "Back", 20);
     backBtn.text->setFillColor(sf::Color::White);
     auto backTxtBounds = backBtn.text->getLocalBounds();
     backBtn.text->setPosition(sf::Vector2f(
@@ -252,7 +268,7 @@ void MainMenu::buildPausedMenu() {
         btn.background.setOutlineColor(sf::Color(100, 100, 100));
         btn.background.setOutlineThickness(2.0f);
         
-        btn.text = new sf::Text(*font, labels[i], 24);
+        btn.text = new sf::Text(font, labels[i], 24);
         btn.text->setFillColor(sf::Color::White);
         
         auto textBounds = btn.text->getLocalBounds();
@@ -265,11 +281,11 @@ void MainMenu::buildPausedMenu() {
     }
 }
 
-MenuAction MainMenu::render(Renderer& renderer, Window& window) {
-    if (!initialized) return MenuAction::None;
+void MainMenu::render(Renderer& renderer) {
+    if (!initialized) return;
     
     // Get mouse position
-    sf::Vector2i sfMousePos = sf::Mouse::getPosition(window.getRenderWindow());
+    sf::Vector2i sfMousePos = sf::Mouse::getPosition(*window);
     mousePos = sf::Vector2f(static_cast<float>(sfMousePos.x), static_cast<float>(sfMousePos.y));
     
     // Update hover states
@@ -282,7 +298,7 @@ MenuAction MainMenu::render(Renderer& renderer, Window& window) {
     
     // Render title for main menu
     if (currentState == MenuState::Main) {
-        sf::Text title(*font, "ONI-like Simulation", 48);
+        sf::Text title(font, "ONI-like Simulation", 48);
         title.setFillColor(sf::Color(100, 200, 255));
         auto titleBounds = title.getLocalBounds();
         title.setPosition(sf::Vector2f(
@@ -291,7 +307,7 @@ MenuAction MainMenu::render(Renderer& renderer, Window& window) {
         ));
         renderer.drawText(title);
     } else if (currentState == MenuState::Paused) {
-        sf::Text title(*font, "PAUSED", 48);
+        sf::Text title(font, "PAUSED", 48);
         title.setFillColor(sf::Color(255, 200, 100));
         auto titleBounds = title.getLocalBounds();
         title.setPosition(sf::Vector2f(
@@ -300,7 +316,7 @@ MenuAction MainMenu::render(Renderer& renderer, Window& window) {
         ));
         renderer.drawText(title);
     } else if (currentState == MenuState::Settings) {
-        sf::Text title(*font, "Settings", 48);
+        sf::Text title(font, "Settings", 48);
         title.setFillColor(sf::Color(200, 200, 200));
         auto titleBounds = title.getLocalBounds();
         title.setPosition(sf::Vector2f(
@@ -312,17 +328,15 @@ MenuAction MainMenu::render(Renderer& renderer, Window& window) {
     
     // Render buttons
     renderButtons(renderer);
-    
-    return MenuAction::None;
 }
 
-void MainMenu::handleEvent(const sf::Event& event) {
-    if (!initialized) return;
+MenuAction MainMenu::handleEvent(const sf::Event& event) {
+    if (!initialized) return MenuAction::None;
     
     if (event.is<sf::Event::MouseButtonPressed>()) {
         auto mouseButton = event.getIf<sf::Event::MouseButtonPressed>();
         if (mouseButton && mouseButton->button == sf::Mouse::Button::Left) {
-            sf::Vector2i sfMousePos = sf::Mouse::getPosition();
+            sf::Vector2i sfMousePos = sf::Mouse::getPosition(*window);
             sf::Vector2f clickPos(static_cast<float>(sfMousePos.x), static_cast<float>(sfMousePos.y));
             
             for (size_t i = 0; i < buttons.size(); ++i) {
@@ -330,19 +344,19 @@ void MainMenu::handleEvent(const sf::Event& event) {
                     // Handle button clicks based on current state
                     if (currentState == MenuState::Main) {
                         if (buttons[i].label == "Play") {
-                            // Will be handled by main loop
+                            return MenuAction::Play;
                         } else if (buttons[i].label == "Settings") {
-                            // Will be handled by main loop
+                            return MenuAction::Settings;
                         } else if (buttons[i].label == "Quit") {
-                            // Will be handled by main loop
+                            return MenuAction::Quit;
                         }
                     } else if (currentState == MenuState::Paused) {
                         if (buttons[i].label == "Resume") {
-                            // Will be handled by main loop
+                            return MenuAction::Resume;
                         } else if (buttons[i].label == "Settings") {
-                            // Will be handled by main loop
+                            return MenuAction::Settings;
                         } else if (buttons[i].label == "Quit to Main") {
-                            // Will be handled by main loop
+                            return MenuAction::QuitToMain;
                         }
                     } else if (currentState == MenuState::Settings) {
                         if (buttons[i].label.find("Display:") == 0) {
@@ -370,9 +384,18 @@ void MainMenu::handleEvent(const sf::Event& event) {
                             buttons[i].label = "Grid Height: " + std::to_string(gridHeightInput);
                             if (buttons[i].text) buttons[i].text->setString(buttons[i].label);
                         } else if (buttons[i].label == "Apply") {
-                            // Will be handled by main loop
+                            // Update settings
+                            auto& settings = SettingsManager::getInstance().getSettings();
+                            std::string modes[] = {"Windowed", "Fullscreen", "Borderless"};
+                            settings.displayMode = static_cast<DisplayMode>(selectedDisplayMode);
+                            settings.screenWidth = resolutions[selectedResolution].first;
+                            settings.screenHeight = resolutions[selectedResolution].second;
+                            settings.vsync = vsyncEnabled;
+                            settings.gridWidth = gridWidthInput;
+                            settings.gridHeight = gridHeightInput;
+                            return MenuAction::ApplySettings;
                         } else if (buttons[i].label == "Back") {
-                            // Will be handled by main loop
+                            return MenuAction::Back;
                         }
                     }
                     break;
@@ -380,6 +403,8 @@ void MainMenu::handleEvent(const sf::Event& event) {
             }
         }
     }
+    
+    return MenuAction::None;
 }
 
 void MainMenu::renderButtons(Renderer& renderer) {
