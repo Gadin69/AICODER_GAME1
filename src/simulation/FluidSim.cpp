@@ -41,6 +41,9 @@ void FluidSim::update(Grid& grid, float deltaTime) {
                 continue;
             }
 
+            // Check for element interactions first
+            checkElementInteractions(grid, x, y);
+            
             ElementProperties props = ElementTypes::getProperties(cell.elementType);
             
             if (props.isGas) {
@@ -49,7 +52,7 @@ void FluidSim::update(Grid& grid, float deltaTime) {
                 updateLiquid(grid, x, y);
             }
             
-            updateTemperature(grid, x, y);
+            cell.updateColor();  // Update color after movement/interactions
         }
     }
 }
@@ -147,4 +150,41 @@ void FluidSim::swapCells(Grid& grid, int x1, int y1, int x2, int y2) {
     grid.setCell(x2, y2, temp);
     grid.getCell(x1, y1).updated = true;
     grid.getCell(x2, y2).updated = true;
+}
+
+void FluidSim::checkElementInteractions(Grid& grid, int x, int y) {
+    Cell& cell = grid.getCell(x, y);
+    
+    // Check all 4 neighbors for interactions
+    int neighbors[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+    
+    for (auto& neighbor : neighbors) {
+        int nx = x + neighbor[0];
+        int ny = y + neighbor[1];
+        
+        if (!grid.isValidPosition(nx, ny)) continue;
+        
+        Cell& neighborCell = grid.getCell(nx, ny);
+        
+        // Lava + Water = Steam (O2) + Solid rock
+        if (cell.elementType == ElementType::Liquid_Lava && 
+            neighborCell.elementType == ElementType::Liquid_Water) {
+            // Lava cools into solid, water turns to steam
+            cell.elementType = ElementType::Solid;
+            neighborCell.elementType = ElementType::Gas_O2;
+            cell.temperature = 100.0f;
+            neighborCell.temperature = 100.0f;
+            cell.updated = true;
+            neighborCell.updated = true;
+        }
+        
+        // Water touches lava (reverse check)
+        if (cell.elementType == ElementType::Liquid_Water && 
+            neighborCell.elementType == ElementType::Liquid_Lava) {
+            // Already handled above
+        }
+        
+        // O2 and CO2 can mix but don't react (density difference already handled)
+        // High density liquids sink through low density gases
+    }
 }

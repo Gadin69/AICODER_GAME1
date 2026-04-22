@@ -192,8 +192,8 @@ void updateSimulation(float deltaTime) {
     // Update fluid simulation
     fluidSim.update(simGrid, deltaTime);
     
-    // TODO: Sync tilemap with simulation grid for visualization
-    // Currently disabled - needs proper color updating in fluidSim
+    // Sync tilemap with simulation grid for visualization
+    syncTileMap();
 }
 
 void renderDemo() {

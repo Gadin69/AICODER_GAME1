@@ -14,6 +14,7 @@ public:
     void updateGas(Grid& grid, int x, int y);
     void updateLiquid(Grid& grid, int x, int y);
     void updateTemperature(Grid& grid, int x, int y);
+    void checkElementInteractions(Grid& grid, int x, int y);
 
     // Helper functions
     bool isEmpty(const Grid& grid, int x, int y);
