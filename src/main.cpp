@@ -8,6 +8,8 @@
 #include "ecs/Entity.h"
 #include <SFML/Graphics.hpp>
 
+#define DEBUG false  // Set to true to enable debug output
+
 // Global variables for demo
 Renderer renderer;
 TileMap tileMap;
@@ -22,7 +24,7 @@ sf::Text* infoText = nullptr;
 void syncTileMap();
 
 void initializeDemo() {
-    LOG_INFO("Initializing demo");
+    if (DEBUG) LOG_INFO("Initializing demo");
     
     // Initialize tile map (40x30 grid with 32px tiles)
     tileMap.initialize(40, 30, 32.0f);
@@ -109,9 +111,9 @@ void initializeDemo() {
         tileMap.setTile(x, 5, gasTile);
     }
     
-    std::cout << "Tilemap setup complete" << std::endl;
+    if (DEBUG) std::cout << "Tilemap setup complete" << std::endl;
     
-    LOG_INFO("Demo initialized");
+    if (DEBUG) LOG_INFO("Demo initialized");
 }
 
 void handleMouseInput(const sf::Event& event) {
@@ -155,7 +157,7 @@ void handleMouseInput(const sf::Event& event) {
                     tileInfo.solid = (currentElement == ElementType::Solid);
                     tileInfo.name = name;
                     tileMap.setTile(tileX, tileY, tileInfo);
-                    std::cout << "Placed " << name << " at (" << tileX << ", " << tileY << ")" << std::endl;
+                    if (DEBUG) std::cout << "Placed " << name << " at (" << tileX << ", " << tileY << ")" << std::endl;
                 } else if (mouseButton->button == sf::Mouse::Button::Right) {
                     // Clear cell
                     simGrid.setCellType(tileX, tileY, ElementType::Empty);
@@ -227,8 +229,13 @@ void renderDemo() {
 
 int main() {
     try {
-        std::cout << "=== Game Engine Starting ===" << std::endl;
-        LOG_INFO("Starting Game Engine");
+        // Set logger to only show warnings and errors (set to DEBUG to see everything)
+        if (!DEBUG) {
+            Logger::getInstance().setLogLevel(LogLevel::WARNING);
+        }
+        
+        if (DEBUG) std::cout << "=== Game Engine Starting ===" << std::endl;
+        if (DEBUG) LOG_INFO("Starting Game Engine");
         
         // Create engine
         Engine engine;
@@ -243,17 +250,17 @@ int main() {
         // Initialize engine
         engine.initialize(config);
         
-        LOG_INFO("Engine initialized, setting up renderer...");
+        if (DEBUG) LOG_INFO("Engine initialized, setting up renderer...");
         
         // Initialize renderer with engine window
         renderer.initialize(engine.getWindow().getRenderWindow());
         
-        LOG_INFO("Renderer initialized, setting up demo...");
+        if (DEBUG) LOG_INFO("Renderer initialized, setting up demo...");
         
         // Initialize demo
         initializeDemo();
         
-        LOG_INFO("Demo initialized, starting game loop...");
+        if (DEBUG) LOG_INFO("Demo initialized, starting game loop...");
         
         // Setup camera to show the tile grid (40x30 tiles at 32px = 1280x960)
         Camera& cam = renderer.getCamera();

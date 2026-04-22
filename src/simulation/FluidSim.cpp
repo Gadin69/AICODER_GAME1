@@ -75,22 +75,28 @@ void FluidSim::updateGas(Grid& grid, int x, int y) {
 void FluidSim::updateLiquid(Grid& grid, int x, int y) {
     Cell& cell = grid.getCell(x, y);
     
-    // Liquid falls
+    // Priority 1: Fall straight down
     if (y < grid.getHeight() - 1 && isEmpty(grid, x, y + 1)) {
         swapCells(grid, x, y, x, y + 1);
-    } else {
-        // Try to move diagonally down
+        return;
+    }
+    
+    // Priority 2: Spread horizontally (only when blocked below)
+    // NO diagonal movement to prevent kitty-corner leaking
+    bool blockedBelow = (y >= grid.getHeight() - 1) || !isEmpty(grid, x, y + 1);
+    
+    if (blockedBelow) {
         int dir = (rand() % 2 == 0) ? -1 : 1;
-        if (y < grid.getHeight() - 1 && grid.isValidPosition(x + dir, y + 1) && isEmpty(grid, x + dir, y + 1)) {
-            swapCells(grid, x, y, x + dir, y + 1);
-        } else if (grid.isValidPosition(x - dir, y + 1) && isEmpty(grid, x - dir, y + 1)) {
-            swapCells(grid, x, y, x - dir, y + 1);
-        } else {
-            // Try to spread horizontally
-            int dir2 = (rand() % 2 == 0) ? -1 : 1;
-            if (grid.isValidPosition(x + dir2, y) && isEmpty(grid, x + dir2, y)) {
-                swapCells(grid, x, y, x + dir2, y);
-            }
+        
+        // Try spreading in random direction first
+        if (grid.isValidPosition(x + dir, y) && isEmpty(grid, x + dir, y)) {
+            swapCells(grid, x, y, x + dir, y);
+            return;
+        }
+        
+        // Try other direction
+        if (grid.isValidPosition(x - dir, y) && isEmpty(grid, x - dir, y)) {
+            swapCells(grid, x, y, x - dir, y);
         }
     }
 }
