@@ -60,14 +60,28 @@ void FluidSim::update(Grid& grid, float deltaTime) {
 void FluidSim::updateGas(Grid& grid, int x, int y) {
     Cell& cell = grid.getCell(x, y);
     
-    // Gas rises
+    // Priority 1: Rise straight up
     if (y > 0 && isEmpty(grid, x, y - 1)) {
         swapCells(grid, x, y, x, y - 1);
-    } else {
-        // Try to move diagonally up
+        return;
+    }
+    
+    // Priority 2: Spread horizontally when blocked above
+    // NO diagonal movement to prevent kitty-corner leaking
+    bool blockedAbove = (y <= 0) || !isEmpty(grid, x, y - 1);
+    
+    if (blockedAbove) {
         int dir = (rand() % 2 == 0) ? -1 : 1;
-        if (y > 0 && grid.isValidPosition(x + dir, y - 1) && isEmpty(grid, x + dir, y - 1)) {
-            swapCells(grid, x, y, x + dir, y - 1);
+        
+        // Try spreading in random direction first
+        if (grid.isValidPosition(x + dir, y) && isEmpty(grid, x + dir, y)) {
+            swapCells(grid, x, y, x + dir, y);
+            return;
+        }
+        
+        // Try other direction
+        if (grid.isValidPosition(x - dir, y) && isEmpty(grid, x - dir, y)) {
+            swapCells(grid, x, y, x - dir, y);
         }
     }
 }
