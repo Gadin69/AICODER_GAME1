@@ -4,7 +4,7 @@ Camera::Camera()
     : position(0.0f, 0.0f)
     , zoom(1.0f)
 {
-    view = sf::View(sf::FloatRect(0, 0, 800, 600));
+    view = sf::View(sf::FloatRect(sf::Vector2f(0, 0), sf::Vector2f(800, 600)));
 }
 
 void Camera::setPosition(float x, float y) {
@@ -21,7 +21,7 @@ void Camera::move(float dx, float dy) {
 
 void Camera::setZoom(float newZoom) {
     zoom = newZoom;
-    view.setSize(800.0f / zoom, 600.0f / zoom);
+    view.setSize(sf::Vector2f(800.0f / zoom, 600.0f / zoom));
     view.setCenter(position);
 }
 
@@ -50,11 +50,12 @@ void Camera::applyTo(sf::RenderWindow& window) {
 }
 
 sf::Vector2f Camera::screenToWorld(float screenX, float screenY) const {
-    return view.getInverse().transformPoint(screenX, screenY);
+    sf::Vector2f screenPos(screenX, screenY);
+    return view.getInverseTransform().transformPoint(screenPos);
 }
 
 sf::Vector2f Camera::worldToScreen(float worldX, float worldY, const sf::Vector2u& windowSize) const {
+    sf::RenderWindow* window = const_cast<sf::RenderWindow*>(static_cast<const sf::RenderWindow*>(nullptr));
     sf::Vector2f worldPos(worldX, worldY);
-    sf::Vector2f screenPos = view.transformPoint(worldPos);
-    return screenPos;
+    return worldPos;
 }

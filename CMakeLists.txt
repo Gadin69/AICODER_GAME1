@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Find SFML
-find_package(SFML 2.5 COMPONENTS graphics window system REQUIRED)
+find_package(SFML 3.1 COMPONENTS Graphics Window System Audio REQUIRED)
 
 # Source files
 set(SOURCES
@@ -66,10 +66,14 @@ set(HEADERS
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
 # Link SFML
-target_link_libraries(${PROJECT_NAME} sfml-graphics sfml-window sfml-system)
+target_link_libraries(${PROJECT_NAME} sfml-graphics sfml-window sfml-system sfml-audio)
 
 # Include directories
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(${PROJECT_NAME} PRIVATE "D:/SFML-3.1.0/include")
+
+# Link directories
+target_link_directories(${PROJECT_NAME} PRIVATE "D:/SFML-3.1.0/lib")
 
 # Set output directory
 set_target_properties(${PROJECT_NAME} PROPERTIES

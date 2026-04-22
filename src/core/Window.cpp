@@ -14,21 +14,15 @@ void Window::create(const WindowConfig& windowConfig) {
     config = windowConfig;
 
     sf::ContextSettings settings;
-    settings.antialiasingLevel = config.antialiasing;
-
-    sf::Uint32 style = sf::Style::Default;
-    if (config.fullscreen) {
-        style = sf::Style::Fullscreen;
-    }
+    settings.antiAliasingLevel = config.antialiasing;
 
     renderWindow.create(
-        sf::VideoMode(config.width, config.height),
+        sf::VideoMode(sf::Vector2u(config.width, config.height)),
         config.title,
-        style,
+        config.fullscreen ? sf::State::Fullscreen : sf::State::Windowed,
         settings
     );
 
-    renderWindow.setFramerateLimit(config.vsync ? 60 : 0);
     renderWindow.setVerticalSyncEnabled(config.vsync);
 
     isCreated = true;
@@ -47,8 +41,8 @@ bool Window::isOpen() const {
     return isCreated && renderWindow.isOpen();
 }
 
-bool Window::pollEvent(sf::Event& event) {
-    return renderWindow.pollEvent(event);
+std::optional<sf::Event> Window::pollEvent() {
+    return renderWindow.pollEvent();
 }
 
 void Window::display() {

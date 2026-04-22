@@ -1,6 +1,7 @@
 #pragma once
 
 #include <SFML/Graphics.hpp>
+#include <optional>
 #include <string>
 
 struct WindowConfig {
@@ -21,7 +22,7 @@ public:
     void close();
 
     bool isOpen() const;
-    bool pollEvent(sf::Event& event);
+    std::optional<sf::Event> pollEvent();
     void display();
     void clear(const sf::Color& color = sf::Color::Black);
 

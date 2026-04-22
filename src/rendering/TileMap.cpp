@@ -21,9 +21,7 @@ void TileMap::initialize(int w, int h, float tileSz) {
         }
     }
 
-    vertexArray.setPrimitiveType(sf::Quads);
-    vertexArray.resize(width * height * 4);
-    needsUpdate = true;
+    // Use simple tile rendering with rectangles (SFML 3 removed Quads)
 }
 
 void TileMap::setTile(int x, int y, const TileInfo& tile) {
@@ -41,6 +39,11 @@ TileInfo TileMap::getTile(int x, int y) const {
 }
 
 void TileMap::render(sf::RenderTarget& target, const sf::Vector2f& cameraPos, const sf::Vector2f& cameraSize) {
+    // Safety check
+    if (width == 0 || height == 0 || tiles.empty()) {
+        return;
+    }
+
     if (needsUpdate) {
         updateVertexArray();
     }
@@ -53,11 +56,15 @@ void TileMap::render(sf::RenderTarget& target, const sf::Vector2f& cameraPos, co
 
     // Only draw visible tiles
     for (int y = startY; y < endY; ++y) {
+        if (y < 0 || y >= height || y >= static_cast<int>(tiles.size())) continue;
+        
         for (int x = startX; x < endX; ++x) {
+            if (x < 0 || x >= width || x >= static_cast<int>(tiles[y].size())) continue;
+            
             const TileInfo& tile = tiles[y][x];
             if (tile.color.a > 0) {
                 sf::RectangleShape tileRect(sf::Vector2f(tileSize, tileSize));
-                tileRect.setPosition(x * tileSize, y * tileSize);
+                tileRect.setPosition(sf::Vector2f(x * tileSize, y * tileSize));
                 tileRect.setFillColor(tile.color);
                 target.draw(tileRect);
             }

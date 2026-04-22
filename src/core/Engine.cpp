@@ -1,5 +1,6 @@
 #include "Engine.h"
 #include "Logger.h"
+#include <iostream>
 
 Engine::Engine()
     : running(false)
@@ -71,14 +72,13 @@ Time& Engine::getTime() {
 }
 
 void Engine::processEvents() {
-    sf::Event event;
-    while (window.pollEvent(event)) {
-        if (event.type == sf::Event::Closed) {
+    while (auto event = window.pollEvent()) {
+        if (event->is<sf::Event::Closed>()) {
             running = false;
         }
 
         if (onEvent) {
-            onEvent(event);
+            onEvent(*event);
         }
     }
 }
