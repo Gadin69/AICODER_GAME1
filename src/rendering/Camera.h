@@ -36,11 +36,11 @@ private:
     
     // Smooth scrolling state
     sf::Vector2f velocity;
-    float acceleration = 2000.0f;  // pixels/s²
-    float deceleration = 1500.0f;  // pixels/s²
-    float maxSpeed = 800.0f;  // pixels/s
+    float acceleration = 400.0f;  // pixels/s² (faster acceleration)
+    float deceleration = 600.0f;  // pixels/s² (faster deceleration)
+    float maxSpeed = 600.0f;  // pixels/s (1.5x top speed)
     bool arrowKeys[4];  // up, down, left, right
-    float scrollSpeed = 500.0f;
+    float scrollSpeed = 225.0f;  // pixels/s (1.5x base speed)
     float edgeScrollMargin = 50.0f;
     bool mouseEdgeActive[4];  // up, down, left, right
     
