@@ -112,9 +112,9 @@ bool GasSim::update(float deltaTime) {
             int priorityNeighbors[4][2] = {{0, -1}, {-1, 0}, {1, 0}, {0, 1}};
             
             // BUOYANCY: Directional spread weights
-            // Gas naturally rises - more mass spreads upward, less downward
-            // Weights: UP=0.35, LEFT=0.15, RIGHT=0.15, DOWN=0.05 (total=0.70)
-            float directionalWeights[4] = {0.35f, 0.15f, 0.15f, 0.05f};
+            // Equal distribution for natural, rounded expansion
+            // Weights: UP=0.20, LEFT=0.20, RIGHT=0.20, DOWN=0.20 (total=0.80)
+            float directionalWeights[4] = {0.20f, 0.20f, 0.20f, 0.20f};
             
             // Calculate how much mass to spread to each neighbor
             // Spread rate depends on pressure differential
@@ -335,17 +335,25 @@ bool GasSim::update(float deltaTime) {
                 
                 float cellMass = cell.mass;
                 
-                // Check if cell is too small to expand (can't split without going below MIN_GAS_MASS)
-                bool tooSmallToExpand = (cellMass - MIN_GAS_MASS < MIN_GAS_MASS * 2.0f);
+                // DEBUG: Log flow attempts for spawned gas
+                static int flowDebugCount = 0;
+                bool isSpawnedFlow = (cellMass >= 0.01f && cellMass <= 0.5f);  // Recently spawned gas
+                if (isSpawnedFlow && flowDebugCount < 10) {
+                    std::cout << "[FLOW] Cell(" << x << "," << y << ") mass=" << cellMass << " checking directions..." << std::endl;
+                    flowDebugCount++;
+                }
                 
-                if (!tooSmallToExpand) continue;  // Normal-sized cells expand, don't flow
+                // GAS FLOW: Try to move/merge in all directions EXCEPT downward
+                // Gas can be PUSHED down by denser gas, but won't intentionally flow down
+                // Gas expands upward via SPREADING (buoyancy), flows sideways/merges here
                 
-                // This cell is too small - try to move/swap
-                // Priority order: UP, UP-DIAGONAL (random), SIDEWAYS (random), DOWN
-                int directions[7][2];
+                // Priority order: UP, UP-DIAGONAL (random), SIDEWAYS (random)
+                // NO intentional downward flow - gas only goes down if pushed
+                // Total: 5 directions (up, up-left, up-right, left, right)
+                int directions[5][2];
                 int dirCount = 0;
                 
-                // UP first
+                // UP first (buoyancy - gas wants to rise)
                 directions[dirCount][0] = 0; directions[dirCount][1] = -1; dirCount++;
                 
                 // UP-DIAGONAL (randomize left/right)
@@ -380,6 +388,12 @@ bool GasSim::update(float deltaTime) {
                     bool isSameGas = isGasType(neighborType) && neighborType == cell.elementType;
                     bool isDifferentGas = isGasType(neighborType) && neighborType != cell.elementType;
                     
+                    // DEBUG: Show what neighbor type was found
+                    if (isSpawnedFlow && flowDebugCount <= 10) {
+                        std::cout << "  Dir " << i << ": (" << nx << "," << ny << ") type=" << (int)neighborType 
+                                  << " vacuum=" << isVacuum << " sameGas=" << isSameGas << std::endl;
+                    }
+                    
                     FlowAction action;
                     action.fromX = x; action.fromY = y;
                     action.toX = nx; action.toY = ny;
@@ -395,16 +409,26 @@ bool GasSim::update(float deltaTime) {
                         break;  // Found a valid move
                     }
                     else if (isSameGas) {
-                        // SAME GAS: Merge if room, otherwise swap
+                        // SAME GAS: Merge if room, otherwise try next direction
                         float spaceAvailable = 2.0f - neighbor.mass;  // 2kg max
-                        if (spaceAvailable > 0.001f) {
-                            // Merge: push as much as fits
-                            action.massToMove = std::min(cellMass, spaceAvailable);
+                        
+                        // Can only merge mass that leaves source above MIN_GAS_MASS
+                        float maxMergeAmount = cellMass - MIN_GAS_MASS;
+                        if (maxMergeAmount < MIN_GAS_MASS) {
+                            // Not enough mass to merge without creating micro-cell
+                            continue;
+                        }
+                        
+                        float actualMergeAmount = std::min(cellMass - MIN_GAS_MASS, spaceAvailable);
+                        
+                        if (actualMergeAmount >= MIN_GAS_MASS && spaceAvailable > 0.001f) {
+                            // Merge: push mass that fits and keeps source above threshold
+                            action.massToMove = actualMergeAmount;
                             action.isMerge = true;
                             flowActions.push_back(action);
                             break;
                         } else {
-                            // No room - try next direction
+                            // No room or can't merge meaningful amount - try next direction
                             continue;
                         }
                     }
@@ -426,9 +450,18 @@ bool GasSim::update(float deltaTime) {
         }
         
         // Apply all flow actions simultaneously
+        static int applyDebugCount = 0;
         for (const auto& action : flowActions) {
             Cell& fromCell = grid->getCell(action.fromX, action.fromY);
             Cell& toCell = grid->getCell(action.toX, action.toY);
+            
+            // DEBUG: Log first few flow applications
+            if (applyDebugCount < 10) {
+                std::cout << "[APPLY FLOW] " << (action.isMerge ? "MERGE" : "SWAP") 
+                          << " (" << action.fromX << "," << action.fromY << ")->(" 
+                          << action.toX << "," << action.toY << ") mass=" << action.massToMove << std::endl;
+                applyDebugCount++;
+            }
             
             if (action.isMerge) {
                 // MERGE: Push mass into target, leftover stays
@@ -445,34 +478,36 @@ bool GasSim::update(float deltaTime) {
                 toCell.updated = true;
                 calculatePressure(action.toX, action.toY);
                 
-                // Leftover stays in original cell
+                // Leftover stays in original cell (already guaranteed to be >= MIN_GAS_MASS)
                 fromCell.mass = leftover;
-                if (leftover < MIN_GAS_MASS) {
-                    // Not enough mass left to keep as gas - return mass to prevent micro-cell
-                    toCell.mass -= massToMerge;  // Cancel the merge
-                    fromCell.mass = action.massToMove;  // Keep mass in source
-                    // Cell stays as gas, just doesn't merge this time
-                } else {
-                    fromCell.updated = true;
-                    calculatePressure(action.fromX, action.fromY);
-                }
+                fromCell.updated = true;
+                calculatePressure(action.fromX, action.fromY);
             } else {
-                // SWAP: Exchange positions
+                // SWAP: Exchange ALL cell data
                 ElementType tempType = fromCell.elementType;
                 float tempMass = fromCell.mass;
                 float tempTemp = fromCell.temperature;
                 float tempPressure = fromCell.pressure;
+                float tempVelX = fromCell.velocityX;
+                float tempVelY = fromCell.velocityY;
+                sf::Color tempColor = fromCell.color;
                 
                 fromCell.elementType = toCell.elementType;
                 fromCell.mass = toCell.mass;
                 fromCell.temperature = toCell.temperature;
                 fromCell.pressure = toCell.pressure;
+                fromCell.velocityX = toCell.velocityX;
+                fromCell.velocityY = toCell.velocityY;
+                fromCell.color = toCell.color;
                 fromCell.updated = true;
                 
                 toCell.elementType = tempType;
                 toCell.mass = tempMass;
                 toCell.temperature = tempTemp;
                 toCell.pressure = tempPressure;
+                toCell.velocityX = tempVelX;
+                toCell.velocityY = tempVelY;
+                toCell.color = tempColor;
                 toCell.updated = true;
                 
                 calculatePressure(action.fromX, action.fromY);

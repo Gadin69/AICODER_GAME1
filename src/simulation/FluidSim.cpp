@@ -89,10 +89,18 @@ void FluidSim::moveLiquidDown(int x, int y) {
     
     // Move into vacuum (nothing is ever "empty")
     if (belowCell.elementType == ElementType::Vacuum) {
-        // Transfer entire mass to new cell
+        // Transfer entire mass to new cell - initialize ALL fields
         belowCell.elementType = cell.elementType;
-        belowCell.mass = cell.mass;  // ONI-STYLE: Transfer actual mass!
+        belowCell.mass = cell.mass;
         belowCell.temperature = cell.temperature;
+        belowCell.pressure = 0.0f;  // Liquids don't have pressure
+        belowCell.velocityX = 0.0f;  // Reset velocity
+        belowCell.velocityY = 0.0f;
+        belowCell.updated = true;
+        belowCell.targetElementType = ElementType::Empty;
+        belowCell.phaseTransitionProgress = 0.0f;
+        belowCell.phaseTransitionSpeed = 0.0f;
+        belowCell.microMassDecayTime = 0.0f;
         belowCell.color = cell.color;
         
         // Source becomes vacuum - reset ALL data to vacuum defaults (COMPLETE cleanup)
@@ -164,9 +172,18 @@ void FluidSim::moveLiquidSideways(int x, int y) {
         
         // Move sideways into vacuum
         if (neighbor.elementType == ElementType::Vacuum) {
+            // Transfer mass - initialize ALL fields
             neighbor.elementType = cell.elementType;
-            neighbor.mass = cell.mass;  // Transfer mass!
+            neighbor.mass = cell.mass;
             neighbor.temperature = cell.temperature;
+            neighbor.pressure = 0.0f;
+            neighbor.velocityX = 0.0f;
+            neighbor.velocityY = 0.0f;
+            neighbor.updated = true;
+            neighbor.targetElementType = ElementType::Empty;
+            neighbor.phaseTransitionProgress = 0.0f;
+            neighbor.phaseTransitionSpeed = 0.0f;
+            neighbor.microMassDecayTime = 0.0f;
             neighbor.color = cell.color;
             
             // Source becomes vacuum - reset ALL data (COMPLETE cleanup)
@@ -241,6 +258,14 @@ void FluidSim::leakLiquidDiagonally(int x, int y, float deltaTime) {
             target.elementType = cell.elementType;
             target.mass = leakAmount;
             target.temperature = cell.temperature;
+            target.pressure = 0.0f;
+            target.velocityX = 0.0f;
+            target.velocityY = 0.0f;
+            target.updated = true;
+            target.targetElementType = ElementType::Empty;
+            target.phaseTransitionProgress = 0.0f;
+            target.phaseTransitionSpeed = 0.0f;
+            target.microMassDecayTime = 0.0f;
             target.updateColor();
             
             cell.mass -= leakAmount;

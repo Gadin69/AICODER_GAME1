@@ -303,7 +303,21 @@ void placeCellAtMouse(sf::Mouse::Button button) {
         // ONI-STYLE: Set initial MASS (full cell by default)
         // Mass = density × volume (1m³ per cell)
         // SAFETY: Ensure minimum mass to prevent division by zero in heat sim
-        placedCell.mass = std::max(props.density, 1.0f);  // Full cell, minimum 1kg
+        
+        // GASES use mass like everything else
+        if (props.isGas) {
+            // Steam/gas has 1/5 the mass of water (0.2 kg vs 1.0 kg)
+            // 1 water cell → 5 steam cells when boiled
+            placedCell.mass = 0.2f;  // Fixed 0.2 kg for all gases
+            // Calculate initial pressure using ideal gas law
+            placedCell.pressure = (placedCell.mass * 8.314f * (placedCell.temperature + 273.15f)) / 0.001f;
+            
+            // Mark cell as updated so it gets simulated next frame
+            placedCell.updated = true;
+        } else {
+            placedCell.mass = std::max(props.density, 1.0f);  // Full cell, minimum 1kg
+            placedCell.pressure = 0.0f;
+        }
         
         // Update tile directly
         sf::Color color = sf::Color::Transparent;
@@ -311,18 +325,33 @@ void placeCellAtMouse(sf::Mouse::Button button) {
         if (currentElement == ElementType::Solid) {
             color = sf::Color(128, 128, 128);
             name = "Solid";
+        } else if (currentElement == ElementType::Solid_Ice) {
+            color = sf::Color(200, 230, 255, 200);
+            name = "Ice";
+        } else if (currentElement == ElementType::Solid_DryIce) {
+            color = sf::Color(240, 240, 255, 220);
+            name = "Dry Ice";
         } else if (currentElement == ElementType::Liquid_Water) {
             color = sf::Color(50, 100, 255, 180);
             name = "Water";
         } else if (currentElement == ElementType::Liquid_Lava) {
             color = sf::Color(255, 100, 0, 200);
             name = "Lava";
+        } else if (currentElement == ElementType::Gas_Lava) {
+            color = sf::Color(255, 200, 50, 80);
+            name = "Gas Lava";
         } else if (currentElement == ElementType::Gas_O2) {
             color = sf::Color(100, 150, 255, 100);
             name = "O2";
         } else if (currentElement == ElementType::Gas_CO2) {
             color = sf::Color(100, 100, 100, 120);
             name = "CO2";
+        } else if (currentElement == ElementType::ContaminatedWater) {
+            color = sf::Color(100, 150, 100, 180);
+            name = "Contaminated Water";
+        } else if (currentElement == ElementType::Solid_ContaminatedWater) {
+            color = sf::Color(150, 180, 150, 200);
+            name = "Frozen Cont. Water";
         } else if (currentElement == ElementType::Vacuum) {
             color = sf::Color(10, 10, 15);
             name = "Vacuum";
@@ -373,15 +402,15 @@ void syncTileMap() {
             // Apply overlay colors based on active visualization mode
             if (showHeatMapOverlay) {
                 // Heat map: color by temperature
-                if (cell.elementType == ElementType::Empty) {
-                    tileInfo.color = sf::Color(20, 20, 20);  // Dark for empty
+                if (cell.elementType == ElementType::Empty || cell.elementType == ElementType::Vacuum) {
+                    tileInfo.color = sf::Color(20, 20, 20);  // Dark for empty/vacuum
                 } else {
                     tileInfo.color = getHeatMapColor(cell.temperature);
                 }
             } else if (showPhaseOverlay) {
                 // Phase overlay: color by state
                 ElementProperties props = ElementTypes::getElement(cell.elementType);
-                if (cell.elementType == ElementType::Empty) {
+                if (cell.elementType == ElementType::Empty || cell.elementType == ElementType::Vacuum) {
                     tileInfo.color = sf::Color(20, 20, 20);
                 } else if (props.isSolid) {
                     tileInfo.color = sf::Color(100, 100, 255);  // Blue = Solid
@@ -393,7 +422,7 @@ void syncTileMap() {
             } else if (showDensityOverlay) {
                 // Density overlay: color by density
                 ElementProperties props = ElementTypes::getElement(cell.elementType);
-                if (cell.elementType == ElementType::Empty) {
+                if (cell.elementType == ElementType::Empty || cell.elementType == ElementType::Vacuum) {
                     tileInfo.color = sf::Color(20, 20, 20);
                 } else {
                     // Map density to color (0-4000 kg/m³)
@@ -442,8 +471,7 @@ void updateElementInspector() {
         ElementProperties props = ElementTypes::getElement(cell.elementType);
         
         // Build inspection string with metric and imperial
-        std::string info = "Position: (" + std::to_string(tileX) + ", " + std::to_string(tileY) + ")\n";
-        info += "Element: " + props.name + "\n";
+        std::string info = "Element: " + props.name + "\n";
         
         // Temperature in Celsius and Fahrenheit (1 decimal place)
         // Safety check for NaN/Inf values
@@ -463,11 +491,10 @@ void updateElementInspector() {
             snprintf(densityBuf, sizeof(densityBuf), "Density: %.1f kg/m^3 / %.1f lb/ft^3\n", props.density, densityImperial);
             info += densityBuf;
             
-            info += "Phase: ";
-            if (props.isSolid) info += "Solid";
-            else if (props.isLiquid) info += "Liquid";
-            else if (props.isGas) info += "Gas";
-            info += "\n";
+            // Mass readout
+            char massBuf[100];
+            snprintf(massBuf, sizeof(massBuf), "Mass: %.4f kg\n", cell.mass);
+            info += massBuf;
             
             if (props.isLiquid || props.isSolid) {
                 float meltF = (props.meltingPoint * 9.0f / 5.0f) + 32.0f;
@@ -482,10 +509,10 @@ void updateElementInspector() {
                 info += boilBuf;
             }
             
-            // Thermal conductivity in W/(m·K) and BTU/(hr·ft·F) (1 decimal place)
+            // Thermal conductivity in W/(m·K) and BTU/(hr·ft·F) (3 decimal places for low values)
             float kImperial = props.thermalConductivity * 0.5779f;
             char kBuf[150];
-            snprintf(kBuf, sizeof(kBuf), "Thermal Conductivity: %.1f W/(m*K) / %.1f BTU/(hr*ft*F)\n", props.thermalConductivity, kImperial);
+            snprintf(kBuf, sizeof(kBuf), "Thermal Conductivity: %.3f W/(m*K) / %.3f BTU/(hr*ft*F)\n", props.thermalConductivity, kImperial);
             info += kBuf;
             
             // Specific heat in J/(kg·K) and BTU/(lb·F) (1 decimal place)
@@ -777,6 +804,18 @@ int main() {
                         break;
                     case sf::Keyboard::Scancode::Num6:
                         currentElement = ElementType::Vacuum;
+                        break;
+                    case sf::Keyboard::Scancode::Num7:
+                        currentElement = ElementType::Solid_Ice;
+                        break;
+                    case sf::Keyboard::Scancode::Num8:
+                        currentElement = ElementType::Gas_Lava;
+                        break;
+                    case sf::Keyboard::Scancode::Num9:
+                        currentElement = ElementType::ContaminatedWater;
+                        break;
+                    case sf::Keyboard::Scancode::Num0:
+                        currentElement = ElementType::Solid_ContaminatedWater;
                         break;
                     case sf::Keyboard::Scancode::R:
                     {
