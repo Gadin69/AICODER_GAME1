@@ -170,8 +170,11 @@ void initializeFonts() {
     
     // Initialize simulation speed slider (available to all players)
     // Position at bottom-left of screen (will be updated dynamically during render)
+    std::cout << "[INIT] Creating simSpeedSlider..." << std::endl;
     simSpeedSlider = new UISlider();
+    std::cout << "[INIT] simSpeedSlider created, pointer: " << simSpeedSlider << std::endl;
     simSpeedSlider->initialize(10, 10, 300, 0.1f, 5.0f, 1.0f, "Sim Speed:", font);
+    std::cout << "[INIT] simSpeedSlider initialized" << std::endl;
     
     // Initialize developer tools (only in DEVELOPER_MODE)
 #if DEVELOPER_MODE
@@ -473,6 +476,12 @@ void updateSimulation(float deltaTime) {
 }
 
 void renderDemo() {
+    static int frameCount = 0;
+    if (frameCount % 60 == 0) {  // Print once per second at 60fps
+        std::cout << "[RENDER] renderDemo called, frame: " << frameCount << std::endl;
+    }
+    frameCount++;
+    
     renderer.beginFrame();
     
     // Render all tiles from tileMap
@@ -517,21 +526,34 @@ void renderDemo() {
     }
     
     // Render simulation speed slider (always visible during gameplay)
-    if (simSpeedSlider && gameState == GameState::Playing) {
+    std::cout << "[SLIDER CHECK] simSpeedSlider: " << (simSpeedSlider ? "NOT NULL" : "NULL") 
+             << " gameState: " << static_cast<int>(gameState) << std::endl;
+    
+    if (simSpeedSlider && (gameState == GameState::Playing || gameState == GameState::Paused)) {
         // Update slider position to bottom of screen dynamically
         sf::Vector2u windowSize = renderer.getRenderWindow().getSize();
         float sliderY = static_cast<float>(windowSize.y) - 50.0f;  // 50px from bottom
+        
+        std::cout << "[SLIDER] Window: " << windowSize.x << "x" << windowSize.y 
+                 << " SliderY: " << sliderY << std::endl;
+        
         simSpeedSlider->track.setPosition(sf::Vector2f(10.0f, sliderY));
         simSpeedSlider->updateThumbPosition();
         simSpeedSlider->label->setPosition(sf::Vector2f(10.0f, sliderY - 25.0f));
         simSpeedSlider->valueText->setPosition(sf::Vector2f(320.0f, sliderY - 2.0f));
         
-        // Reset view to screen coordinates for UI
+        // Reset view to screen coordinates for UI overlay
         sf::View defaultView = renderer.getRenderWindow().getDefaultView();
         renderer.getRenderWindow().setView(defaultView);
+        
+        std::cout << "[SLIDER] Track pos: " << simSpeedSlider->track.getPosition().x << "," 
+                 << simSpeedSlider->track.getPosition().y << std::endl;
+        
         simSpeedSlider->render(renderer);
         
-        // Restore camera view for game rendering
+        // Don't restore camera view - slider should be on top, endFrame will display it
+    } else {
+        // Ensure camera view is set for game rendering if no UI overlay
         renderer.getCamera().applyTo(renderer.getRenderWindow());
     }
     
@@ -588,6 +610,9 @@ int main() {
         sf::Vector2u windowSize = renderer.getRenderWindow().getSize();
         renderer.getCamera().setViewSize(static_cast<float>(windowSize.x), static_cast<float>(windowSize.y));
         
+        // Initialize fonts and UI elements
+        initializeFonts();
+        
         // Initialize menus
         try {
             mainMenu.initialize(renderer.getRenderWindow());
@@ -620,7 +645,10 @@ int main() {
                 // Main menu
                 MenuAction action = mainMenu.handleEvent(event);
                 
+                std::cout << "[MENU] Action: " << static_cast<int>(action) << std::endl;
+                
                 if (action == MenuAction::Play) {
+                    std::cout << "[MENU] Play clicked! simulationInitialized: " << simulationInitialized << std::endl;
                     gameState = GameState::Playing;
                     if (!simulationInitialized) {
                         initializeDemo();
@@ -795,9 +823,7 @@ int main() {
             
             // Update camera smooth scrolling
             if (gameState == GameState::Playing) {
-                renderer.getCamera().update(deltaTime);
-                
-                // Handle arrow keys for camera
+                // Handle arrow keys for camera (MUST be before update())
                 if (sf::Keyboard::isKeyPressed(sf::Keyboard::Scancode::Up)) {
                     renderer.getCamera().handleArrowKeys(sf::Keyboard::Scancode::Up, true);
                 } else {
@@ -819,10 +845,13 @@ int main() {
                     renderer.getCamera().handleArrowKeys(sf::Keyboard::Scancode::Right, false);
                 }
                 
-                // Handle mouse edge scrolling
+                // Handle mouse edge scrolling (MUST be before update())
                 sf::Vector2i mousePos = sf::Mouse::getPosition(renderer.getRenderWindow());
                 sf::Vector2u windowSize = renderer.getRenderWindow().getSize();
                 renderer.getCamera().handleMouseEdge(sf::Vector2f(mousePos.x, mousePos.y), windowSize);
+                
+                // Now update camera with all inputs set
+                renderer.getCamera().update(deltaTime);
                 
                 // Update LOD chunk manager with current camera position
                 sf::Vector2f camPos = renderer.getCamera().getPosition();

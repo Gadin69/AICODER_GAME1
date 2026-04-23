@@ -100,14 +100,27 @@ void Camera::update(float deltaTime) {
     
     // Smooth acceleration/deceleration
     if (targetVelocity.x != 0 || targetVelocity.y != 0) {
-        // Accelerate towards target velocity
+        // Accelerate towards target velocity using additive acceleration (frame-rate independent)
         float speed = std::sqrt(targetVelocity.x * targetVelocity.x + targetVelocity.y * targetVelocity.y);
         if (speed > maxSpeed) {
             targetVelocity = targetVelocity / speed * maxSpeed;
         }
         
-        velocity.x += (targetVelocity.x - velocity.x) * acceleration * deltaTime;
-        velocity.y += (targetVelocity.y - velocity.y) * acceleration * deltaTime;
+        // Calculate acceleration amount for this frame
+        float accelAmount = acceleration * deltaTime;
+        
+        // Accelerate each axis independently towards target
+        if (velocity.x < targetVelocity.x) {
+            velocity.x = std::min(targetVelocity.x, velocity.x + accelAmount);
+        } else if (velocity.x > targetVelocity.x) {
+            velocity.x = std::max(targetVelocity.x, velocity.x - accelAmount);
+        }
+        
+        if (velocity.y < targetVelocity.y) {
+            velocity.y = std::min(targetVelocity.y, velocity.y + accelAmount);
+        } else if (velocity.y > targetVelocity.y) {
+            velocity.y = std::max(targetVelocity.y, velocity.y - accelAmount);
+        }
     } else {
         // Decelerate when no input
         float decelFactor = deceleration * deltaTime;
@@ -118,9 +131,24 @@ void Camera::update(float deltaTime) {
         else velocity.y -= (velocity.y > 0 ? decelFactor : -decelFactor);
     }
     
+    // Hard clamp velocity to prevent runaway acceleration
+    float currentSpeed = std::sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
+    if (currentSpeed > maxSpeed * 2.0f) {  // Allow temporary overshoot but prevent infinite
+        velocity = velocity / currentSpeed * maxSpeed * 2.0f;
+    }
+    
     // Apply velocity
     position.x += velocity.x * deltaTime;
     position.y += velocity.y * deltaTime;
+    
+    // Sanity check: if position jumped too far, reset velocity
+    sf::Vector2f lastPos = position - sf::Vector2f(velocity.x * deltaTime, velocity.y * deltaTime);
+    float jumpDistance = std::sqrt((position.x - lastPos.x) * (position.x - lastPos.x) + 
+                                    (position.y - lastPos.y) * (position.y - lastPos.y));
+    if (jumpDistance > maxSpeed * deltaTime * 3.0f) {
+        velocity = sf::Vector2f(0, 0);  // Reset velocity on impossible jump
+        position = lastPos;  // Revert to valid position
+    }
     
     // Clamp to extended bounds (grid + 1/8 view size for limited empty space viewing)
     // This ensures 75% of screen still shows map area at full scroll
@@ -140,6 +168,12 @@ void Camera::update(float deltaTime) {
     
     // Update view
     view.setCenter(position);
+    
+    // Clear input flags at END of update to prevent stale state in next frame
+    // (handleMouseEdge will set them again before next update call)
+    for (int i = 0; i < 4; ++i) {
+        mouseEdgeActive[i] = false;
+    }
 }
 
 void Camera::setScrollSpeed(float speed) {
@@ -188,11 +222,19 @@ void Camera::handleArrowKeys(const sf::Keyboard::Scancode key, bool pressed) {
 }
 
 void Camera::handleMouseEdge(const sf::Vector2f& mousePos, const sf::Vector2u& windowSize) {
-    // Check if mouse is near edges
-    mouseEdgeActive[0] = mousePos.y < edgeScrollMargin;  // Top
-    mouseEdgeActive[1] = mousePos.y > windowSize.y - edgeScrollMargin;  // Bottom
-    mouseEdgeActive[2] = mousePos.x < edgeScrollMargin;  // Left
-    mouseEdgeActive[3] = mousePos.x > windowSize.x - edgeScrollMargin;  // Right
+    // Validate mouse position is within window bounds
+    if (mousePos.x < 0 || mousePos.x > windowSize.x || 
+        mousePos.y < 0 || mousePos.y > windowSize.y) {
+        // Mouse outside window, disable all edge scrolling
+        for (int i = 0; i < 4; ++i) mouseEdgeActive[i] = false;
+        return;
+    }
+    
+    // Only trigger on the very edge pixels (1-2 pixels from border)
+    mouseEdgeActive[0] = mousePos.y < 2.0f;  // Top edge
+    mouseEdgeActive[1] = mousePos.y > static_cast<float>(windowSize.y) - 2.0f;  // Bottom edge
+    mouseEdgeActive[2] = mousePos.x < 2.0f;  // Left edge
+    mouseEdgeActive[3] = mousePos.x > static_cast<float>(windowSize.x) - 2.0f;  // Right edge
 }
 
 void Camera::setGridBounds(float minX, float minY, float maxX, float maxY) {
