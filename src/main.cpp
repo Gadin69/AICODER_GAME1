@@ -382,7 +382,8 @@ void syncTileMap() {
 
 void updateElementInspector() {
 #if DEVELOPER_MODE
-    if (!showElementInspector || !inspectorText) return;
+    // Only update when Left Alt is held
+    if (!inspectorText || !sf::Keyboard::isKeyPressed(sf::Keyboard::Scancode::LAlt)) return;
     
     // Get mouse position in SCREEN coordinates
     sf::Vector2i mousePos = sf::Mouse::getPosition(renderer.getRenderWindow());
@@ -589,10 +590,11 @@ void renderDemo() {
     }
 #endif
     
-    // Render element inspector (dev mode)
+    // Render element inspector (dev mode) - only when Left Alt is held
 #if DEVELOPER_MODE
-    if (showElementInspector && inspectorText) {
-        renderer.drawText(*inspectorText);
+    if (inspectorText && sf::Keyboard::isKeyPressed(sf::Keyboard::Scancode::LAlt)) {
+        updateElementInspector();  // Update data
+        renderer.drawText(*inspectorText);  // Render
     }
 #endif
     
