@@ -40,6 +40,7 @@ set(SOURCES
     src/ui/MainMenu.cpp
     src/ui/SettingsMenu.cpp
     src/ui/PauseMenu.cpp
+    src/ui/UISlider.cpp
 )
 
 # Header files
@@ -79,6 +80,7 @@ set(HEADERS
     src/ui/MainMenu.h
     src/ui/SettingsMenu.h
     src/ui/PauseMenu.h
+    src/ui/UISlider.h
 )
 
 # Create executable

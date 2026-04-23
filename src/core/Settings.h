@@ -12,6 +12,8 @@ struct GameSettings {
     unsigned int gridHeight = 60;
     float cameraScrollSpeed = 500.0f;  // pixels per second
     float cameraEdgeScrollMargin = 50.0f;  // pixels from edge
+    float cameraAcceleration = 400.0f;  // pixels/s²
+    float cameraMaxSpeed = 600.0f;  // pixels/s
 };
 
 class SettingsManager {

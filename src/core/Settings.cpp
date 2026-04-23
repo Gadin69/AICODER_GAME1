@@ -33,6 +33,8 @@ void SettingsManager::saveSettings() {
     file << "gridHeight=" << settings.gridHeight << "\n";
     file << "cameraScrollSpeed=" << settings.cameraScrollSpeed << "\n";
     file << "cameraEdgeScrollMargin=" << settings.cameraEdgeScrollMargin << "\n";
+    file << "cameraAcceleration=" << settings.cameraAcceleration << "\n";
+    file << "cameraMaxSpeed=" << settings.cameraMaxSpeed << "\n";
     
     file.close();
     LOG_INFO("Settings saved to " + settingsFilePath);
@@ -73,6 +75,10 @@ void SettingsManager::loadSettings() {
             settings.cameraScrollSpeed = std::stof(value);
         } else if (key == "cameraEdgeScrollMargin") {
             settings.cameraEdgeScrollMargin = std::stof(value);
+        } else if (key == "cameraAcceleration") {
+            settings.cameraAcceleration = std::stof(value);
+        } else if (key == "cameraMaxSpeed") {
+            settings.cameraMaxSpeed = std::stof(value);
         }
     }
     

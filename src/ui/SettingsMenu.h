@@ -3,6 +3,7 @@
 #include "core/Window.h"
 #include "core/Settings.h"
 #include "rendering/Renderer.h"
+#include "UISlider.h"
 #include <SFML/Graphics.hpp>
 #include <vector>
 #include <string>
@@ -81,4 +82,10 @@ private:
     
     sf::Vector2f mousePos;
     sf::Vector2u lastWindowSize;  // Track window size to detect changes
+    
+    // Camera control sliders
+    UISlider cameraSpeedSlider;
+    UISlider cameraAccelSlider;
+    UISlider cameraMaxSpeedSlider;
+    bool cameraSettingsChanged = false;
 };

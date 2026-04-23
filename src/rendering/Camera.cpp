@@ -109,14 +109,17 @@ void Camera::update(float deltaTime) {
     position.x += velocity.x * deltaTime;
     position.y += velocity.y * deltaTime;
     
-    // Clamp to extended bounds (grid + half view size for empty space viewing)
-    // This allows camera to scroll past grid edges into empty space
+    // Clamp to extended bounds (grid + 1/8 view size for limited empty space viewing)
+    // This ensures 75% of screen still shows map area at full scroll
     if (hasGridBounds) {
         sf::Vector2f viewSize = view.getSize();
-        float extendedMinX = gridMinX - viewSize.x / 2.0f;
-        float extendedMaxX = gridMaxX + viewSize.x / 2.0f;
-        float extendedMinY = gridMinY - viewSize.y / 2.0f;
-        float extendedMaxY = gridMaxY + viewSize.y / 2.0f;
+        float marginX = viewSize.x * 0.125f;  // 12.5% of view width (1/8)
+        float marginY = viewSize.y * 0.125f;  // 12.5% of view height (1/8)
+        
+        float extendedMinX = gridMinX - marginX;
+        float extendedMaxX = gridMaxX + marginX;
+        float extendedMinY = gridMinY - marginY;
+        float extendedMaxY = gridMaxY + marginY;
         
         position.x = std::max(extendedMinX, std::min(extendedMaxX, position.x));
         position.y = std::max(extendedMinY, std::min(extendedMaxY, position.y));
@@ -130,8 +133,22 @@ void Camera::setScrollSpeed(float speed) {
     scrollSpeed = speed;
 }
 
+void Camera::setAcceleration(float accel) {
+    acceleration = accel;
+    deceleration = accel * 1.5f;  // Keep deceleration at 1.5x acceleration
+}
+
+void Camera::setMaxSpeed(float maxSpd) {
+    maxSpeed = maxSpd;
+}
+
 void Camera::setEdgeMargin(float margin) {
     edgeScrollMargin = margin;
+}
+
+void Camera::setViewSize(float width, float height) {
+    view.setSize(sf::Vector2f(width, height));
+    view.setCenter(position);
 }
 
 void Camera::handleArrowKeys(const sf::Keyboard::Scancode key, bool pressed) {

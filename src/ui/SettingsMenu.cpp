@@ -183,6 +183,36 @@ void SettingsMenu::buildMenu() {
         backBtn.background.getPosition().y + (buttonHeight - backTxtBounds.size.y) / 2.0f
     ));
     buttons.push_back(std::move(backBtn));
+    
+    // Initialize camera control sliders
+    float sliderY = startY + spacing * 6.5f;
+    float sliderWidth = windowWidth * 0.4f;
+    
+    // Camera Speed slider
+    cameraSpeedSlider.initialize(
+        (windowWidth - sliderWidth) / 2.0f, sliderY,
+        sliderWidth,
+        50.0f, 500.0f, settings.cameraScrollSpeed,
+        "Camera Speed:", font
+    );
+    
+    // Camera Acceleration slider
+    cameraAccelSlider.initialize(
+        (windowWidth - sliderWidth) / 2.0f, sliderY + spacing * 1.5f,
+        sliderWidth,
+        100.0f, 1000.0f, 400.0f,
+        "Camera Acceleration:", font
+    );
+    
+    // Camera Max Speed slider
+    cameraMaxSpeedSlider.initialize(
+        (windowWidth - sliderWidth) / 2.0f, sliderY + spacing * 3.0f,
+        sliderWidth,
+        200.0f, 1200.0f, 600.0f,
+        "Camera Max Speed:", font
+    );
+    
+    cameraSettingsChanged = false;
 }
 
 void SettingsMenu::render(Renderer& renderer) {
@@ -220,10 +250,39 @@ void SettingsMenu::render(Renderer& renderer) {
     renderer.drawText(title);
     
     renderButtons(renderer);
+    
+    // Render camera control sliders
+    cameraSpeedSlider.render(renderer);
+    cameraAccelSlider.render(renderer);
+    cameraMaxSpeedSlider.render(renderer);
 }
 
 MenuAction SettingsMenu::handleEvent(const sf::Event& event) {
     if (!initialized) return MenuAction::None;
+    
+    // Handle slider events
+    if (event.is<sf::Event::MouseButtonPressed>()) {
+        sf::Vector2i mousePos = sf::Mouse::getPosition(*window);
+        sf::Vector2f pos(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
+        cameraSpeedSlider.handleMousePress(pos);
+        cameraAccelSlider.handleMousePress(pos);
+        cameraMaxSpeedSlider.handleMousePress(pos);
+        if (cameraSpeedSlider.isDragging || cameraAccelSlider.isDragging || cameraMaxSpeedSlider.isDragging) {
+            cameraSettingsChanged = true;
+        }
+    } else if (event.is<sf::Event::MouseButtonReleased>()) {
+        cameraSpeedSlider.handleMouseRelease();
+        cameraAccelSlider.handleMouseRelease();
+        cameraMaxSpeedSlider.handleMouseRelease();
+    } else if (event.is<sf::Event::MouseMoved>()) {
+        auto mouseMove = event.getIf<sf::Event::MouseMoved>();
+        if (mouseMove) {
+            sf::Vector2f pos(static_cast<float>(mouseMove->position.x), static_cast<float>(mouseMove->position.y));
+            cameraSpeedSlider.handleMouseMove(pos);
+            cameraAccelSlider.handleMouseMove(pos);
+            cameraMaxSpeedSlider.handleMouseMove(pos);
+        }
+    }
     
     if (event.is<sf::Event::MouseButtonPressed>()) {
         auto mouseButton = event.getIf<sf::Event::MouseButtonPressed>();
@@ -256,6 +315,14 @@ MenuAction SettingsMenu::handleEvent(const sf::Event& event) {
                         settings.vsync = vsyncEnabled;
                         settings.gridWidth = gridWidthInput;
                         settings.gridHeight = gridHeightInput;
+                        
+                        // Apply camera settings if changed
+                        if (cameraSettingsChanged) {
+                            settings.cameraScrollSpeed = cameraSpeedSlider.currentValue;
+                            settings.cameraAcceleration = cameraAccelSlider.currentValue;
+                            settings.cameraMaxSpeed = cameraMaxSpeedSlider.currentValue;
+                        }
+                        
                         return MenuAction::ApplySettings;
                     } else if (buttons[i].label == "Back") {
                         return MenuAction::Back;

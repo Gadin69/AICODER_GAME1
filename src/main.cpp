@@ -10,6 +10,7 @@
 #include "ui/SettingsMenu.h"
 #include "ui/PauseMenu.h"
 #include "ecs/Entity.h"
+#include "ui/UISlider.h"
 #include <SFML/Graphics.hpp>
 
 #define DEBUG_MODE false  // Set to true to enable debug console output
@@ -36,102 +37,6 @@ bool simulationInitialized = false;
 ElementType currentElement = ElementType::Liquid_Water;
 sf::Font font;
 sf::Text* infoText = nullptr;
-
-// UI Slider for simulation time step
-struct UISlider {
-    sf::RectangleShape track;
-    sf::RectangleShape thumb;
-    sf::Text* label = nullptr;
-    sf::Text* valueText = nullptr;
-    sf::Font* fontPtr = nullptr;
-    float minValue;
-    float maxValue;
-    float currentValue;
-    bool isDragging = false;
-    bool initialized = false;
-    
-    void initialize(float x, float y, float width, float minVal, float maxVal, float defaultVal, const std::string& labelText, const sf::Font& font) {
-        minValue = minVal;
-        maxValue = maxVal;
-        currentValue = defaultVal;
-        fontPtr = const_cast<sf::Font*>(&font);
-        
-        // Track background
-        track.setSize(sf::Vector2f(width, 20));
-        track.setPosition(sf::Vector2f(x, y));
-        track.setFillColor(sf::Color(50, 50, 50));
-        track.setOutlineColor(sf::Color(100, 100, 100));
-        track.setOutlineThickness(2.0f);
-        
-        // Thumb (draggable part)
-        thumb.setSize(sf::Vector2f(15, 30));
-        updateThumbPosition();
-        thumb.setFillColor(sf::Color(100, 150, 255));
-        thumb.setOutlineColor(sf::Color(150, 200, 255));
-        thumb.setOutlineThickness(1.0f);
-        
-        // Label
-        label = new sf::Text(font, labelText, 16);
-        label->setFillColor(sf::Color::White);
-        label->setPosition(sf::Vector2f(x, y - 25));
-        
-        // Value text
-        valueText = new sf::Text(font, "", 14);
-        valueText->setFillColor(sf::Color(200, 200, 200));
-        valueText->setPosition(sf::Vector2f(x + width + 10, y - 2));
-        updateValueText();
-        
-        initialized = true;
-    }
-    
-    void updateThumbPosition() {
-        float ratio = (currentValue - minValue) / (maxValue - minValue);
-        float thumbX = track.getPosition().x + ratio * (track.getSize().x - thumb.getSize().x);
-        thumb.setPosition(sf::Vector2f(thumbX, track.getPosition().y - 5));
-    }
-    
-    void updateValueText() {
-        if (valueText) {
-            valueText->setString(std::to_string(currentValue).substr(0, 4) + "x");
-        }
-    }
-    
-    void handleMousePress(const sf::Vector2f& mousePos) {
-        sf::FloatRect thumbBounds = thumb.getGlobalBounds();
-        if (thumbBounds.contains(mousePos)) {
-            isDragging = true;
-        }
-    }
-    
-    void handleMouseRelease() {
-        isDragging = false;
-    }
-    
-    void handleMouseMove(const sf::Vector2f& mousePos) {
-        if (!isDragging) return;
-        
-        float trackLeft = track.getPosition().x;
-        float trackRight = track.getPosition().x + track.getSize().x;
-        
-        // Clamp mouse position to track bounds
-        float clampedX = std::max(trackLeft, std::min(trackRight, mousePos.x));
-        
-        // Calculate ratio and update value
-        float ratio = (clampedX - trackLeft) / (trackRight - trackLeft);
-        currentValue = minValue + ratio * (maxValue - minValue);
-        
-        updateThumbPosition();
-        updateValueText();
-    }
-    
-    void render(Renderer& renderer) {
-        if (!initialized) return;
-        renderer.drawRectangle(track);
-        renderer.drawRectangle(thumb);
-        if (label) renderer.drawText(*label);
-        if (valueText) renderer.drawText(*valueText);
-    }
-};
 
 // UI Slider for simulation speed
 UISlider* simSpeedSlider = nullptr;
@@ -241,6 +146,7 @@ void initializeDemo() {
     // Setup camera bounds to match grid
     float gridWidthPx = settings.gridWidth * 32.0f;
     float gridHeightPx = settings.gridHeight * 32.0f;
+    
     renderer.getCamera().setGridBounds(0, 0, gridWidthPx, gridHeightPx);
     renderer.getCamera().setPosition(gridWidthPx / 2.0f, gridHeightPx / 2.0f);
     renderer.getCamera().setScrollSpeed(settings.cameraScrollSpeed);
@@ -678,6 +584,10 @@ int main() {
         // Initialize renderer with engine window
         renderer.initialize(engine.getWindow().getRenderWindow());
         
+        // Set camera view size to match window dimensions
+        sf::Vector2u windowSize = renderer.getRenderWindow().getSize();
+        renderer.getCamera().setViewSize(static_cast<float>(windowSize.x), static_cast<float>(windowSize.y));
+        
         // Initialize menus
         try {
             mainMenu.initialize(renderer.getRenderWindow());
@@ -737,6 +647,11 @@ int main() {
                     newConfig.vsync = settings.vsync;
                     engine.getWindow().applySettings(newConfig);
                     renderer.getRenderWindow().setVerticalSyncEnabled(settings.vsync);
+                    
+                    // Apply camera settings
+                    renderer.getCamera().setScrollSpeed(settings.cameraScrollSpeed);
+                    renderer.getCamera().setAcceleration(settings.cameraAcceleration);
+                    renderer.getCamera().setMaxSpeed(settings.cameraMaxSpeed);
                     
                     if (simulationInitialized) {
                         gameState = GameState::Paused;
