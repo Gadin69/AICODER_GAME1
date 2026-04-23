@@ -45,6 +45,10 @@ void Renderer::drawRectangle(const sf::RectangleShape& rectangle) {
     renderWindow->draw(rectangle);
 }
 
+void Renderer::drawShape(const sf::CircleShape& shape) {
+    renderWindow->draw(shape);
+}
+
 void Renderer::drawText(sf::Text& text) {
     renderWindow->draw(text);
 }

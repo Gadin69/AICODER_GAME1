@@ -19,6 +19,7 @@ public:
     void drawTileMap(TileMap& tileMap);
     void drawSprite(const sf::Sprite& sprite);
     void drawRectangle(const sf::RectangleShape& rectangle);
+    void drawShape(const sf::CircleShape& shape);
     void drawText(sf::Text& text);
 
     sf::RenderWindow& getRenderWindow();

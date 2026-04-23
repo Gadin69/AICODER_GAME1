@@ -4,6 +4,12 @@
 #include "core/Settings.h"
 #include "rendering/Renderer.h"
 #include "UISlider.h"
+#include "UIButton.h"
+#include "UICheckbox.h"
+#include "UIToggle.h"
+#include "UIDropdown.h"
+#include "UINumberInput.h"
+#include "MainMenu.h"  // For MenuAction enum
 #include <SFML/Graphics.hpp>
 #include <vector>
 #include <string>
@@ -22,56 +28,22 @@ public:
     MenuAction handleEvent(const sf::Event& event);
 
 private:
-    struct Button {
-        sf::RectangleShape background;
-        sf::Text* text = nullptr;
-        std::string label;
-        bool isHovered = false;
-        
-        Button() = default;
-        ~Button() { delete text; }
-        
-        Button(Button&& other) noexcept 
-            : background(std::move(other.background)),
-              text(other.text),
-              label(std::move(other.label)),
-              isHovered(other.isHovered) {
-            other.text = nullptr;
-        }
-        
-        Button& operator=(Button&& other) noexcept {
-            if (this != &other) {
-                delete text;
-                background = std::move(other.background);
-                text = other.text;
-                label = std::move(other.label);
-                isHovered = other.isHovered;
-                other.text = nullptr;
-            }
-            return *this;
-        }
-        
-        Button(const Button&) = delete;
-        Button& operator=(const Button&) = delete;
-    };
-    
     void buildMenu();
-    void renderButtons(Renderer& renderer);
-    bool isMouseOverButton(const Button& btn, const sf::Vector2f& mousePos);
-    void updateButtonHover(const sf::Vector2f& mousePos);
-    void updateButtonText(Button& btn);
     
     sf::Font font;
     sf::RenderWindow* window = nullptr;
-    std::vector<Button> buttons;
-    bool initialized = false;
     
-    // Settings state
-    int selectedDisplayMode = 0;
-    int selectedResolution = 0;
-    bool vsyncEnabled = true;
-    int gridWidthInput = 80;
-    int gridHeightInput = 60;
+    // UI Components
+    UIDropdown displayDropdown;
+    UIDropdown resolutionDropdown;
+    UIToggle vsyncToggle;
+    UINumberInput gridWidthInput;
+    UINumberInput gridHeightInput;
+    UIButton applyButton;
+    UIButton backButton;
+    
+    bool initialized = false;
+    MenuAction lastAction = MenuAction::None;
     
     std::vector<std::pair<unsigned int, unsigned int>> resolutions = {
         {1280, 720},

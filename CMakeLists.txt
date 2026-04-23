@@ -41,6 +41,15 @@ set(SOURCES
     src/ui/SettingsMenu.cpp
     src/ui/PauseMenu.cpp
     src/ui/UISlider.cpp
+    src/ui/UIButton.cpp
+    src/ui/UICheckbox.cpp
+    src/ui/UIProgressBar.cpp
+    src/ui/UIToggle.cpp
+    src/ui/UITextInput.cpp
+    src/ui/UIDropdown.cpp
+    src/ui/UIRadioButton.cpp
+    src/ui/UITooltip.cpp
+    src/ui/UINumberInput.cpp
 )
 
 # Header files
@@ -81,6 +90,15 @@ set(HEADERS
     src/ui/SettingsMenu.h
     src/ui/PauseMenu.h
     src/ui/UISlider.h
+    src/ui/UIButton.h
+    src/ui/UICheckbox.h
+    src/ui/UIProgressBar.h
+    src/ui/UIToggle.h
+    src/ui/UITextInput.h
+    src/ui/UIDropdown.h
+    src/ui/UIRadioButton.h
+    src/ui/UITooltip.h
+    src/ui/UINumberInput.h
 )
 
 # Create executable

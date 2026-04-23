@@ -25,8 +25,6 @@ bool MainMenu::isInitialized() const {
 }
 
 void MainMenu::buildMenu() {
-    buttons.clear();
-    
     if (!initialized) {
         std::cerr << "ERROR: buildMenu called but menu not initialized" << std::endl;
         return;
@@ -44,34 +42,41 @@ void MainMenu::buildMenu() {
     float spacing = windowHeight * 0.03f;
     float startY = windowHeight / 2.0f - buttonHeight * 1.5f - spacing;
     
-    std::vector<std::string> labels = {"Play", "Settings", "Quit"};
-    
     // Scale font size based on window height
     unsigned int fontSize = static_cast<unsigned int>(windowHeight * 0.035f);
     
-    for (size_t i = 0; i < labels.size(); ++i) {
-        Button btn;
-        btn.label = labels[i];
-        btn.background.setSize(sf::Vector2f(buttonWidth, buttonHeight));
-        btn.background.setPosition(sf::Vector2f(
-            (windowWidth - buttonWidth) / 2.0f,
-            startY + i * (buttonHeight + spacing)
-        ));
-        btn.background.setFillColor(sf::Color(50, 50, 50));
-        btn.background.setOutlineColor(sf::Color(100, 100, 100));
-        btn.background.setOutlineThickness(2.0f);
-        
-        btn.text = new sf::Text(font, labels[i], fontSize);
-        btn.text->setFillColor(sf::Color::White);
-        
-        auto textBounds = btn.text->getLocalBounds();
-        btn.text->setPosition(sf::Vector2f(
-            btn.background.getPosition().x + (buttonWidth - textBounds.size.x) / 2.0f,
-            btn.background.getPosition().y + (buttonHeight - textBounds.size.y) / 2.0f
-        ));
-        
-        buttons.push_back(std::move(btn));
-    }
+    // Play button
+    playButton.initialize(
+        (windowWidth - buttonWidth) / 2.0f,
+        startY,
+        buttonWidth, buttonHeight,
+        "Play", font
+    );
+    playButton.setCallback([this]() {
+        lastAction = MenuAction::Play;
+    });
+    
+    // Settings button
+    settingsButton.initialize(
+        (windowWidth - buttonWidth) / 2.0f,
+        startY + buttonHeight + spacing,
+        buttonWidth, buttonHeight,
+        "Settings", font
+    );
+    settingsButton.setCallback([this]() {
+        lastAction = MenuAction::Settings;
+    });
+    
+    // Quit button
+    quitButton.initialize(
+        (windowWidth - buttonWidth) / 2.0f,
+        startY + (buttonHeight + spacing) * 2,
+        buttonWidth, buttonHeight,
+        "Quit", font
+    );
+    quitButton.setCallback([this]() {
+        lastAction = MenuAction::Quit;
+    });
 }
 
 void MainMenu::render(Renderer& renderer) {
@@ -87,7 +92,10 @@ void MainMenu::render(Renderer& renderer) {
     sf::Vector2i sfMousePos = sf::Mouse::getPosition(*window);
     mousePos = sf::Vector2f(static_cast<float>(sfMousePos.x), static_cast<float>(sfMousePos.y));
     
-    updateButtonHover(mousePos);
+    // Update button hover states
+    playButton.handleMouseMove(mousePos);
+    settingsButton.handleMouseMove(mousePos);
+    quitButton.handleMouseMove(mousePos);
     
     // Get actual window size
     sf::Vector2u windowSize = window->getSize();
@@ -111,11 +119,17 @@ void MainMenu::render(Renderer& renderer) {
     ));
     renderer.drawText(title);
     
-    renderButtons(renderer);
+    // Render buttons
+    playButton.render(renderer);
+    settingsButton.render(renderer);
+    quitButton.render(renderer);
 }
 
 MenuAction MainMenu::handleEvent(const sf::Event& event) {
     if (!initialized) return MenuAction::None;
+    
+    // Reset last action
+    lastAction = MenuAction::None;
     
     if (event.is<sf::Event::MouseButtonPressed>()) {
         auto mouseButton = event.getIf<sf::Event::MouseButtonPressed>();
@@ -123,46 +137,24 @@ MenuAction MainMenu::handleEvent(const sf::Event& event) {
             sf::Vector2i sfMousePos = sf::Mouse::getPosition(*window);
             sf::Vector2f clickPos(static_cast<float>(sfMousePos.x), static_cast<float>(sfMousePos.y));
             
-            for (size_t i = 0; i < buttons.size(); ++i) {
-                if (isMouseOverButton(buttons[i], clickPos)) {
-                    if (buttons[i].label == "Play") {
-                        return MenuAction::Play;
-                    } else if (buttons[i].label == "Settings") {
-                        return MenuAction::Settings;
-                    } else if (buttons[i].label == "Quit") {
-                        return MenuAction::Quit;
-                    }
-                    break;
-                }
-            }
+            // Route mouse press to buttons
+            playButton.handleMousePress(clickPos);
+            settingsButton.handleMousePress(clickPos);
+            quitButton.handleMousePress(clickPos);
+        }
+    } else if (event.is<sf::Event::MouseButtonReleased>()) {
+        auto mouseButton = event.getIf<sf::Event::MouseButtonReleased>();
+        if (mouseButton && mouseButton->button == sf::Mouse::Button::Left) {
+            sf::Vector2i sfMousePos = sf::Mouse::getPosition(*window);
+            sf::Vector2f clickPos(static_cast<float>(sfMousePos.x), static_cast<float>(sfMousePos.y));
+            
+            // Route mouse release to buttons (triggers callbacks)
+            playButton.handleMouseRelease();
+            settingsButton.handleMouseRelease();
+            quitButton.handleMouseRelease();
         }
     }
     
-    return MenuAction::None;
+    return lastAction;
 }
 
-void MainMenu::renderButtons(Renderer& renderer) {
-    for (auto& btn : buttons) {
-        if (btn.isHovered) {
-            btn.background.setFillColor(sf::Color(80, 80, 80));
-        } else {
-            btn.background.setFillColor(sf::Color(50, 50, 50));
-        }
-        
-        renderer.drawRectangle(btn.background);
-        if (btn.text) renderer.drawText(*btn.text);
-    }
-}
-
-bool MainMenu::isMouseOverButton(const Button& btn, const sf::Vector2f& mousePos) {
-    sf::Vector2f pos = btn.background.getPosition();
-    sf::Vector2f size = btn.background.getSize();
-    return mousePos.x >= pos.x && mousePos.x <= pos.x + size.x &&
-           mousePos.y >= pos.y && mousePos.y <= pos.y + size.y;
-}
-
-void MainMenu::updateButtonHover(const sf::Vector2f& mousePos) {
-    for (auto& btn : buttons) {
-        btn.isHovered = isMouseOverButton(btn, mousePos);
-    }
-}
