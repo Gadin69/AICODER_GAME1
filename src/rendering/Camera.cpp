@@ -58,8 +58,21 @@ void Camera::applyTo(sf::RenderWindow& window) {
 }
 
 sf::Vector2f Camera::screenToWorld(float screenX, float screenY) const {
-    sf::Vector2f screenPos(screenX, screenY);
-    return view.getInverseTransform().transformPoint(screenPos);
+    // Manually calculate world position from screen coordinates
+    sf::Vector2f viewSize = view.getSize();
+    sf::Vector2f viewCenter = view.getCenter();
+    
+    // Get the viewport size (should match window size)
+    sf::Vector2i viewportSize = sf::Vector2i(
+        static_cast<int>(viewSize.x),
+        static_cast<int>(viewSize.y)
+    );
+    
+    // Calculate world position
+    float worldX = viewCenter.x + (screenX - viewportSize.x / 2.0f);
+    float worldY = viewCenter.y + (screenY - viewportSize.y / 2.0f);
+    
+    return sf::Vector2f(worldX, worldY);
 }
 
 sf::Vector2f Camera::worldToScreen(float worldX, float worldY, const sf::Vector2u& windowSize) const {
