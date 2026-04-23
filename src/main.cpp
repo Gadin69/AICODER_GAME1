@@ -384,10 +384,15 @@ void updateElementInspector() {
 #if DEVELOPER_MODE
     if (!showElementInspector || !inspectorText) return;
     
-    // Get mouse position
+    // Get mouse position in SCREEN coordinates
     sf::Vector2i mousePos = sf::Mouse::getPosition(renderer.getRenderWindow());
-    int tileX = mousePos.x / 32;
-    int tileY = mousePos.y / 32;
+    
+    // Convert to WORLD coordinates using camera
+    sf::Vector2f worldPos = renderer.getCamera().screenToWorld((float)mousePos.x, (float)mousePos.y);
+    
+    // Convert world coordinates to tile coordinates (32px tiles)
+    int tileX = (int)(worldPos.x / 32.0f);
+    int tileY = (int)(worldPos.y / 32.0f);
     
     if (simGrid.isValidPosition(tileX, tileY)) {
         // THREAD-SAFE: Lock grid before reading cell data
@@ -400,14 +405,24 @@ void updateElementInspector() {
         std::string info = "Position: (" + std::to_string(tileX) + ", " + std::to_string(tileY) + ")\n";
         info += "Element: " + props.name + "\n";
         
-        // Temperature in Celsius and Fahrenheit
-        float tempF = (cell.temperature * 9.0f / 5.0f) + 32.0f;
-        info += "Temperature: " + std::to_string((int)cell.temperature) + "°C / " + std::to_string((int)tempF) + "°F\n";
+        // Temperature in Celsius and Fahrenheit (1 decimal place)
+        // Safety check for NaN/Inf values
+        float displayTemp = cell.temperature;
+        if (std::isnan(displayTemp) || std::isinf(displayTemp)) {
+            displayTemp = -273.15f;  // Default to absolute zero if invalid
+        }
+        float tempF = (displayTemp * 9.0f / 5.0f) + 32.0f;
+        char tempBuf[100];
+        snprintf(tempBuf, sizeof(tempBuf), "Temperature: %.1f C / %.1f F\n", displayTemp, tempF);
+        info += tempBuf;
         
         if (cell.elementType != ElementType::Empty) {
-            // Density in kg/m³ and lb/ft³
+            // Density in kg/m^3 and lb/ft^3 (1 decimal place)
             float densityImperial = props.density * 0.06243f;
-            info += "Density: " + std::to_string((int)props.density) + " kg/m³ / " + std::to_string((int)densityImperial) + " lb/ft³\n";
+            char densityBuf[100];
+            snprintf(densityBuf, sizeof(densityBuf), "Density: %.1f kg/m^3 / %.1f lb/ft^3\n", props.density, densityImperial);
+            info += densityBuf;
+            
             info += "Phase: ";
             if (props.isSolid) info += "Solid";
             else if (props.isLiquid) info += "Liquid";
@@ -416,22 +431,28 @@ void updateElementInspector() {
             
             if (props.isLiquid || props.isSolid) {
                 float meltF = (props.meltingPoint * 9.0f / 5.0f) + 32.0f;
-                info += "Melting Point: " + std::to_string((int)props.meltingPoint) + "°C / " + std::to_string((int)meltF) + "°F\n";
+                char meltBuf[100];
+                snprintf(meltBuf, sizeof(meltBuf), "Melting Point: %.1f C / %.1f F\n", props.meltingPoint, meltF);
+                info += meltBuf;
             }
             if (props.isLiquid || props.isGas) {
                 float boilF = (props.boilingPoint * 9.0f / 5.0f) + 32.0f;
-                info += "Boiling Point: " + std::to_string((int)props.boilingPoint) + "°C / " + std::to_string((int)boilF) + "°F\n";
+                char boilBuf[100];
+                snprintf(boilBuf, sizeof(boilBuf), "Boiling Point: %.1f C / %.1f F\n", props.boilingPoint, boilF);
+                info += boilBuf;
             }
             
-            // Thermal conductivity in W/(m·K) and BTU/(hr·ft·°F)
+            // Thermal conductivity in W/(m·K) and BTU/(hr·ft·F) (1 decimal place)
             float kImperial = props.thermalConductivity * 0.5779f;
-            info += "Thermal Conductivity: " + std::to_string(props.thermalConductivity).substr(0, 4) + " W/(m·K) / " + 
-                    std::to_string(kImperial).substr(0, 4) + " BTU/(hr·ft·°F)\n";
+            char kBuf[150];
+            snprintf(kBuf, sizeof(kBuf), "Thermal Conductivity: %.1f W/(m*K) / %.1f BTU/(hr*ft*F)\n", props.thermalConductivity, kImperial);
+            info += kBuf;
             
-            // Specific heat in J/(kg·K) and BTU/(lb·°F)
+            // Specific heat in J/(kg·K) and BTU/(lb·F) (1 decimal place)
             float cpImperial = props.specificHeatCapacity * 0.000238846f;
-            info += "Specific Heat: " + std::to_string((int)props.specificHeatCapacity) + " J/(kg·K) / " + 
-                    std::to_string(cpImperial).substr(0, 5) + " BTU/(lb·°F)";
+            char cpBuf[150];
+            snprintf(cpBuf, sizeof(cpBuf), "Specific Heat: %.1f J/(kg*K) / %.1f BTU/(lb*F)", props.specificHeatCapacity, cpImperial);
+            info += cpBuf;
         }
         
         inspectorText->setString(info);
@@ -439,13 +460,17 @@ void updateElementInspector() {
         // UNLOCK grid after reading
         simGrid.unlock();
         
-        // Position near mouse but not under it
+        // Position near mouse but not under it (in SCREEN coordinates)
         float textX = mousePos.x + 20;
         float textY = mousePos.y - 10;
         
-        // Keep on screen
-        if (textX + 300 > 1280) textX = mousePos.x - 320;
-        if (textY + 200 > 720) textY = 720 - 200;
+        // Get actual window size for clamping
+        sf::Vector2u windowSize = renderer.getRenderWindow().getSize();
+        
+        // Keep on screen - flip to left side if too far right
+        if (textX + 350 > (float)windowSize.x) textX = mousePos.x - 370;
+        // Keep on screen - flip above mouse if too low
+        if (textY + 250 > (float)windowSize.y) textY = mousePos.y - 260;
         
         inspectorText->setPosition(sf::Vector2f(textX, textY));
     } else {
