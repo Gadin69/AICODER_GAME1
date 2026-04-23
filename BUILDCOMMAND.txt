@@ -1,0 +1,1 @@
+cd d:\AICODER_FILES\game_engine; & "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build 2>&1 | Select-String -Pattern "error:|undefined" -Context 2

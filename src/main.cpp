@@ -38,6 +38,10 @@ ElementType currentElement = ElementType::Liquid_Water;
 sf::Font font;
 sf::Text* infoText = nullptr;
 
+// Mouse placement state
+bool isLeftMouseHeld = false;
+bool isRightMouseHeld = false;
+
 // UI Slider for simulation speed
 UISlider* simSpeedSlider = nullptr;
 bool isAdminMode = DEVELOPER_MODE;  // Auto-enabled if DEVELOPER_MODE is true
@@ -52,6 +56,7 @@ bool showDensityOverlay = false;  // F5 - Density visualization
 // Forward declarations
 void syncTileMap();
 void updateElementInspector();
+void placeCellAtMouse(sf::Mouse::Button button);
 
 sf::Color getHeatMapColor(float temperature) {
     // Color gradient: Blue (cold) -> Cyan -> Green -> Yellow -> Red (hot)
@@ -233,93 +238,121 @@ void handleMouseInput(const sf::Event& event) {
     if (event.is<sf::Event::MouseButtonPressed>()) {
         auto mouseButton = event.getIf<sf::Event::MouseButtonPressed>();
         if (mouseButton) {
-            // Get mouse position in screen coordinates
-            sf::Vector2i mousePos = sf::Mouse::getPosition(renderer.getRenderWindow());
-            
-            // CRITICAL FIX: Convert screen coordinates to world coordinates using camera
-            sf::Vector2f worldPos = renderer.getCamera().screenToWorld(
-                static_cast<float>(mousePos.x), 
-                static_cast<float>(mousePos.y)
-            );
-            
-            // Convert world coordinates to tile coordinates (32px tiles)
-            int tileX = static_cast<int>(worldPos.x / 32.0f);
-            int tileY = static_cast<int>(worldPos.y / 32.0f);
-            
-            if (simGrid.isValidPosition(tileX, tileY)) {
-                if (mouseButton->button == sf::Mouse::Button::Left) {
-                    // THREAD-SAFE: Lock grid before modifying cells
-                    simGrid.lock();
-                    
-                    // Place element
-                    simGrid.setCellType(tileX, tileY, currentElement);
-                    
-                    // Set properties from element (DATA-DRIVEN)
-                    Cell& placedCell = simGrid.getCell(tileX, tileY);
-                    ElementProperties props = ElementTypes::getElement(currentElement);
-                    placedCell.temperature = props.defaultTemperature;
-                    
-                    // ONI-STYLE: Set initial MASS (full cell by default)
-                    // Mass = density × volume (1m³ per cell)
-                    // SAFETY: Ensure minimum mass to prevent division by zero in heat sim
-                    placedCell.mass = std::max(props.density, 1.0f);  // Full cell, minimum 1kg
-                    
-                    // DEBUG: Log placement
-                    std::cout << "[PLACE] " << props.name << " at (" << tileX << "," << tileY 
-                              << ") temp=" << placedCell.temperature 
-                              << " mass=" << placedCell.mass << std::endl;
-                    
-                    // Update tile directly
-                    sf::Color color = sf::Color::Transparent;
-                    std::string name = "Empty";
-                    if (currentElement == ElementType::Solid) {
-                        color = sf::Color(128, 128, 128);
-                        name = "Solid";
-                    } else if (currentElement == ElementType::Liquid_Water) {
-                        color = sf::Color(50, 100, 255, 180);
-                        name = "Water";
-                    } else if (currentElement == ElementType::Liquid_Lava) {
-                        color = sf::Color(255, 100, 0, 200);
-                        name = "Lava";
-                    } else if (currentElement == ElementType::Gas_O2) {
-                        color = sf::Color(100, 150, 255, 100);
-                        name = "O2";
-                    } else if (currentElement == ElementType::Gas_CO2) {
-                        color = sf::Color(100, 100, 100, 120);
-                        name = "CO2";
-                    } else if (currentElement == ElementType::Vacuum) {
-                        color = sf::Color(10, 10, 15);
-                        name = "Vacuum";
-                    }
-                    
-                    TileInfo tileInfo;
-                    tileInfo.color = color;
-                    tileInfo.solid = (currentElement == ElementType::Solid);
-                    tileInfo.name = name;
-                    tileMap.setTile(tileX, tileY, tileInfo);
-                    
-                    // UNLOCK grid after modifications
-                    simGrid.unlock();
-                    
-                    if (DEBUG_MODE) std::cout << "Placed " << name << " at (" << tileX << ", " << tileY << ")" << std::endl;
-                } else if (mouseButton->button == sf::Mouse::Button::Right) {
-                    // THREAD-SAFE: Lock grid before clearing cells
-                    simGrid.lock();
-                    
-                    // Clear cell
-                    simGrid.setCellType(tileX, tileY, ElementType::Empty);
-                    
-                    TileInfo emptyTile;
-                    emptyTile.color = sf::Color::Transparent;
-                    emptyTile.solid = false;
-                    emptyTile.name = "Empty";
-                    tileMap.setTile(tileX, tileY, emptyTile);
-                    
-                    // UNLOCK grid
-                    simGrid.unlock();
-                }
+            if (mouseButton->button == sf::Mouse::Button::Left) {
+                isLeftMouseHeld = true;
+            } else if (mouseButton->button == sf::Mouse::Button::Right) {
+                isRightMouseHeld = true;
+            }
+            placeCellAtMouse(mouseButton->button);
+        }
+    } else if (event.is<sf::Event::MouseButtonReleased>()) {
+        auto mouseButton = event.getIf<sf::Event::MouseButtonReleased>();
+        if (mouseButton) {
+            if (mouseButton->button == sf::Mouse::Button::Left) {
+                isLeftMouseHeld = false;
+            } else if (mouseButton->button == sf::Mouse::Button::Right) {
+                isRightMouseHeld = false;
             }
         }
+    } else if (event.is<sf::Event::MouseMoved>()) {
+        // Place cells continuously while dragging
+        if (isLeftMouseHeld) {
+            placeCellAtMouse(sf::Mouse::Button::Left);
+        } else if (isRightMouseHeld) {
+            placeCellAtMouse(sf::Mouse::Button::Right);
+        }
+    }
+}
+
+void placeCellAtMouse(sf::Mouse::Button button) {
+    // Get mouse position in screen coordinates
+    sf::Vector2i mousePos = sf::Mouse::getPosition(renderer.getRenderWindow());
+    
+    // Convert screen coordinates to world coordinates using camera
+    sf::Vector2f worldPos = renderer.getCamera().screenToWorld(
+        static_cast<float>(mousePos.x), 
+        static_cast<float>(mousePos.y)
+    );
+    
+    // Convert world coordinates to tile coordinates (32px tiles)
+    int tileX = static_cast<int>(worldPos.x / 32.0f);
+    int tileY = static_cast<int>(worldPos.y / 32.0f);
+    
+    if (!simGrid.isValidPosition(tileX, tileY)) {
+        return;
+    }
+    
+    if (button == sf::Mouse::Button::Left) {
+        // Check if cell already has this element type - skip if so
+        const Cell& existingCell = simGrid.getCell(tileX, tileY);
+        if (existingCell.elementType == currentElement) {
+            return;  // Already has this element, don't overwrite
+        }
+        
+        // THREAD-SAFE: Lock grid before modifying cells
+        simGrid.lock();
+        
+        // Place element
+        simGrid.setCellType(tileX, tileY, currentElement);
+        
+        // Set properties from element (DATA-DRIVEN)
+        Cell& placedCell = simGrid.getCell(tileX, tileY);
+        ElementProperties props = ElementTypes::getElement(currentElement);
+        placedCell.temperature = props.defaultTemperature;
+        
+        // ONI-STYLE: Set initial MASS (full cell by default)
+        // Mass = density × volume (1m³ per cell)
+        // SAFETY: Ensure minimum mass to prevent division by zero in heat sim
+        placedCell.mass = std::max(props.density, 1.0f);  // Full cell, minimum 1kg
+        
+        // Update tile directly
+        sf::Color color = sf::Color::Transparent;
+        std::string name = "Empty";
+        if (currentElement == ElementType::Solid) {
+            color = sf::Color(128, 128, 128);
+            name = "Solid";
+        } else if (currentElement == ElementType::Liquid_Water) {
+            color = sf::Color(50, 100, 255, 180);
+            name = "Water";
+        } else if (currentElement == ElementType::Liquid_Lava) {
+            color = sf::Color(255, 100, 0, 200);
+            name = "Lava";
+        } else if (currentElement == ElementType::Gas_O2) {
+            color = sf::Color(100, 150, 255, 100);
+            name = "O2";
+        } else if (currentElement == ElementType::Gas_CO2) {
+            color = sf::Color(100, 100, 100, 120);
+            name = "CO2";
+        } else if (currentElement == ElementType::Vacuum) {
+            color = sf::Color(10, 10, 15);
+            name = "Vacuum";
+        }
+        
+        TileInfo tileInfo;
+        tileInfo.color = color;
+        tileInfo.solid = (currentElement == ElementType::Solid);
+        tileInfo.name = name;
+        tileMap.setTile(tileX, tileY, tileInfo);
+        
+        // UNLOCK grid after modifications
+        simGrid.unlock();
+        
+        if (DEBUG_MODE) std::cout << "Placed " << name << " at (" << tileX << ", " << tileY << ")" << std::endl;
+    } else if (button == sf::Mouse::Button::Right) {
+        // THREAD-SAFE: Lock grid before clearing cells
+        simGrid.lock();
+        
+        // Clear cell
+        simGrid.setCellType(tileX, tileY, ElementType::Empty);
+        
+        TileInfo emptyTile;
+        emptyTile.color = sf::Color::Transparent;
+        emptyTile.solid = false;
+        emptyTile.name = "Empty";
+        tileMap.setTile(tileX, tileY, emptyTile);
+        
+        // UNLOCK grid
+        simGrid.unlock();
     }
 }
 
