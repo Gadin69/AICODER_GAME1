@@ -9,10 +9,12 @@ void Renderer::initialize(sf::RenderWindow& window) {
     renderWindow = &window;
 }
 
-void Renderer::beginFrame() {
+void Renderer::beginFrame(bool applyCamera) {
     renderWindow->clear(sf::Color(20, 20, 40));  // Dark blue-black background
-    // TEMPORARILY DISABLE CAMERA - use screen coordinates
-    // camera.applyTo(*renderWindow);
+    // Apply camera view for proper world-space rendering (skip for UI/menus)
+    if (applyCamera) {
+        camera.applyTo(*renderWindow);
+    }
     spriteBatch.begin();
 }
 

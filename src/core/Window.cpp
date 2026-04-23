@@ -79,9 +79,23 @@ void Window::create(const WindowConfig& windowConfig) {
     renderWindow.setVerticalSyncEnabled(config.vsync);
 
     isCreated = true;
+    
+    // DEBUG: Log actual window size after creation
+    sf::Vector2u actualSize = renderWindow.getSize();
+    sf::Vector2u desktopSize = sf::VideoMode::getDesktopMode().size;
+    std::string displayModeStr = (config.displayMode == DisplayMode::Fullscreen) ? "Fullscreen" :
+                                 (config.displayMode == DisplayMode::BorderlessWindowed) ? "Borderless" : "Windowed";
+    
+    LOG_INFO("=== WINDOW DEBUG ===");
+    LOG_INFO("Config resolution: " + std::to_string(config.width) + "x" + std::to_string(config.height));
+    LOG_INFO("Desktop resolution: " + std::to_string(desktopSize.x) + "x" + std::to_string(desktopSize.y));
+    LOG_INFO("Requested windowSize: " + std::to_string(windowSize.x) + "x" + std::to_string(windowSize.y));
+    LOG_INFO("Actual window size after create: " + std::to_string(actualSize.x) + "x" + std::to_string(actualSize.y));
+    LOG_INFO("Display mode: " + displayModeStr);
+    LOG_INFO("====================");
+    
     LOG_INFO("Window created: " + std::to_string(windowSize.x) + "x" + std::to_string(windowSize.y) + 
-             " (" + (config.displayMode == DisplayMode::Fullscreen ? "Fullscreen" :
-                    config.displayMode == DisplayMode::BorderlessWindowed ? "Borderless" : "Windowed") + ")");
+             " (" + displayModeStr + ")");
 }
 
 void Window::close() {

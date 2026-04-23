@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Grid.h"
+#include "ChunkManager.h"
 #include <memory>
 #include <mutex>
 #include <string>
@@ -39,6 +40,9 @@ public:
     // Thread safety
     std::mutex& getMutex() { return systemMutex; }
     
+    // LOD support
+    void setChunkManager(ChunkManager* chunkMgr) { chunkManager = chunkMgr; }
+    
 protected:
     Grid* grid = nullptr;
     std::string systemName;
@@ -46,6 +50,7 @@ protected:
     float updateTimer;     // Time since last update
     bool enabled;
     std::mutex systemMutex;  // For thread-safe grid access
+    ChunkManager* chunkManager = nullptr;  // For LOD-based updates
     
     // Helper: check if system should update this frame
     bool shouldUpdate(float deltaTime) {
@@ -55,5 +60,11 @@ protected:
             return true;
         }
         return false;
+    }
+    
+    // Helper: check if a cell should be updated based on LOD
+    bool shouldUpdateCell(int x, int y, float deltaTime) {
+        if (!chunkManager) return true;  // No LOD, always update
+        return chunkManager->shouldUpdateCell(x, y, deltaTime);
     }
 };

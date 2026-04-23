@@ -28,6 +28,7 @@ set(SOURCES
     src/simulation/GasSim.cpp
     src/simulation/HeatSim.cpp
     src/simulation/SimulationManager.cpp
+    src/simulation/ChunkManager.cpp
     src/simulation/HeatMap.cpp
     src/simulation/ElementTypes.cpp
     src/entities/Character.cpp
@@ -64,6 +65,7 @@ set(HEADERS
     src/simulation/HeatSim.h
     src/simulation/SimulationSystem.h
     src/simulation/SimulationManager.h
+    src/simulation/ChunkManager.h
     src/simulation/HeatMap.h
     src/simulation/ElementTypes.h
     src/entities/Character.h

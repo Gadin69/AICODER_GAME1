@@ -23,6 +23,9 @@ bool HeatSim::update(float deltaTime) {
         for (int x = 1; x < width - 1; ++x) {
             if (!grid->isValidPosition(x, y)) continue;
             
+            // LOD CHECK: Skip cells based on camera distance
+            if (!shouldUpdateCell(x, y, deltaTime)) continue;
+            
             const Cell& cell = grid->getCell(x, y);
             if (cell.elementType == ElementType::Empty) continue;
             
@@ -30,10 +33,10 @@ bool HeatSim::update(float deltaTime) {
             if (cell.elementType == ElementType::Vacuum) continue;
             
             // Transfer heat with neighbors
-            transferHeat(x, y);
+            transferHeat(x, y, deltaTime);
             
             // Apply environmental cooling/heating
-            applyEnvironmentalCooling(x, y);
+            applyEnvironmentalCooling(x, y, deltaTime);
             
             // Check if temperature triggers phase change
             checkPhaseChangeTriggers(x, y);
@@ -52,7 +55,7 @@ void HeatSim::setAmbientTemperature(float temp) {
     ambientTemp = temp;
 }
 
-void HeatSim::transferHeat(int x, int y) {
+void HeatSim::transferHeat(int x, int y, float deltaTime) {
     Cell& cell = grid->getCell(x, y);
     const Element& cellProps = ElementTypes::getElement(cell.elementType);
     
@@ -108,7 +111,8 @@ void HeatSim::transferHeat(int x, int y) {
         
         // SLOW HEAT TRANSFER: Only move toward equilibrium gradually
         // Higher thermal mass = slower to change temperature
-        float transferRate = avgConductivity * conductivityMultiplier * 0.01f;
+        // TIME-SCALED: Multiply by deltaTime for frame-rate independence
+        float transferRate = avgConductivity * conductivityMultiplier * 0.01f * deltaTime;
         
         // Energy to transfer (limited by conductivity)
         float energyToTransfer = (equilibriumTemp - cell.temperature) * cellThermalMass * transferRate;
@@ -119,7 +123,7 @@ void HeatSim::transferHeat(int x, int y) {
     }
 }
 
-void HeatSim::applyEnvironmentalCooling(int x, int y) {
+void HeatSim::applyEnvironmentalCooling(int x, int y, float deltaTime) {
     Cell& cell = grid->getCell(x, y);
     const Element& props = ElementTypes::getElement(cell.elementType);
     
@@ -129,7 +133,8 @@ void HeatSim::applyEnvironmentalCooling(int x, int y) {
     
     // Trend toward ambient temperature
     // Cooling rate inversely proportional to thermal mass
-    float coolingRate = 0.05f / (thermalMass * 0.001f);  // Normalize
+    // TIME-SCALED: Multiply by deltaTime for frame-rate independence
+    float coolingRate = 0.05f / (thermalMass * 0.001f) * deltaTime;  // Normalize
     float envEffect = (ambientTemp - cell.temperature) * coolingRate;
     
     // Gases cool faster (low thermal mass)

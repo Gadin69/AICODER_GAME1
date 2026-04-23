@@ -21,6 +21,9 @@ bool FluidSim::update(float deltaTime) {
         for (int x = 1; x < width - 1; ++x) {
             if (!grid->isValidPosition(x, y)) continue;
             
+            // LOD CHECK: Skip cells based on camera distance
+            if (!shouldUpdateCell(x, y, deltaTime)) continue;
+            
             Cell& cell = grid->getCell(x, y);
             
             // Only process liquids
@@ -34,8 +37,10 @@ bool FluidSim::update(float deltaTime) {
             // Calculate flow probability based on viscosity AND mass
             // Low viscosity + low mass = high probability (flows fast)
             // High viscosity + high mass = low probability (flows slow)
+            // TIME-SCALED: Adjust probability by deltaTime for frame-rate independence
             float massRatio = cell.mass / props.density;  // 0.0 to 1.0 (partial to full)
-            float moveProbability = (1.0f / (1.0f + props.viscosity * 0.5f)) * massRatio;
+            float baseProbability = (1.0f / (1.0f + props.viscosity * 0.5f)) * massRatio;
+            float moveProbability = baseProbability * (deltaTime / 0.1f);  // Normalize to 100ms base rate
             
             // Use random to determine if fluid moves this tick
             static thread_local std::mt19937 rng(42);

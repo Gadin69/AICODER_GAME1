@@ -44,6 +44,8 @@ void SimulationManager::initialize(Grid& grid) {
     // Initialize all systems
     for (auto& system : systems) {
         system->initialize(grid);
+        // Set chunk manager reference for LOD support
+        system->setChunkManager(&chunkManager);
     }
     
     // Start persistent worker threads if threading is enabled
@@ -132,6 +134,15 @@ std::string SimulationManager::getSystemStatus() const {
                   " (update: " + std::to_string(system->getUpdateInterval()) + "s)\n";
     }
     return status;
+}
+
+void SimulationManager::setCameraPosition(float x, float y, float viewWidth, float viewHeight) {
+    chunkManager.updateCameraPosition(x, y, viewWidth, viewHeight);
+    chunkManager.updateLODLevels();
+}
+
+bool SimulationManager::shouldUpdateCell(int x, int y, float deltaTime) {
+    return chunkManager.shouldUpdateCell(x, y, deltaTime);
 }
 
 void SimulationManager::registerSystem(std::unique_ptr<SimulationSystem> system) {

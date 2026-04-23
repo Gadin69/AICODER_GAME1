@@ -10,7 +10,7 @@ public:
     Renderer();
 
     void initialize(sf::RenderWindow& window);
-    void beginFrame();
+    void beginFrame(bool applyCamera = true);
     void endFrame();
 
     void setCamera(const Camera& camera);

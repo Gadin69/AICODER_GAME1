@@ -4,6 +4,7 @@
 #include "HeatSim.h"
 #include "FluidSim.h"
 #include "GasSim.h"
+#include "ChunkManager.h"
 #include <vector>
 #include <memory>
 #include <thread>
@@ -44,10 +45,18 @@ public:
     int getActiveSystemCount() const;
     std::string getSystemStatus() const;
     
+    // LOD management
+    ChunkManager& getChunkManager() { return chunkManager; }
+    void setCameraPosition(float x, float y, float viewWidth, float viewHeight);
+    bool shouldUpdateCell(int x, int y, float deltaTime);
+    
 private:
     Grid* grid = nullptr;
     bool useThreading = false;  // DISABLED: True parallel sim requires full double-buffering isolation
     std::atomic<bool> running{false};
+    
+    // LOD management
+    ChunkManager chunkManager;
     
     // Simulation systems
     std::unique_ptr<HeatSim> heatSim;

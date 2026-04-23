@@ -12,7 +12,7 @@
 #include "ecs/Entity.h"
 #include <SFML/Graphics.hpp>
 
-#define DEBUG false  // Set to true to enable debug console output
+#define DEBUG_MODE false  // Set to true to enable debug console output
 #define DEVELOPER_MODE true  // Set to true to enable admin/dev tools (sliders, overlays, etc.)
 
 // Global variables for demo
@@ -92,7 +92,7 @@ struct UISlider {
     
     void updateValueText() {
         if (valueText) {
-            valueText->setString(std::to_string(currentValue).substr(0, 4) + "s");
+            valueText->setString(std::to_string(currentValue).substr(0, 4) + "x");
         }
     }
     
@@ -133,7 +133,8 @@ struct UISlider {
     }
 };
 
-UISlider* timeStepSlider = nullptr;
+// UI Slider for simulation speed
+UISlider* simSpeedSlider = nullptr;
 bool isAdminMode = DEVELOPER_MODE;  // Auto-enabled if DEVELOPER_MODE is true
 bool showElementInspector = DEVELOPER_MODE;  // Toggle element inspection overlay
 sf::Text* inspectorText = nullptr;  // Hover inspection display
@@ -180,7 +181,7 @@ sf::Color getHeatMapColor(float temperature) {
 }
 
 void initializeDemo() {
-    if (DEBUG) LOG_INFO("Initializing demo");
+    if (DEBUG_MODE) LOG_INFO("Initializing demo");
     
     auto& settings = SettingsManager::getInstance().getSettings();
     
@@ -245,8 +246,11 @@ void initializeDemo() {
     renderer.getCamera().setScrollSpeed(settings.cameraScrollSpeed);
     renderer.getCamera().setEdgeMargin(settings.cameraEdgeScrollMargin);
     
+    // Initialize LOD chunk manager for distance-based simulation updates
+    simManager.getChunkManager().initialize(settings.gridWidth, settings.gridHeight, 16);
+    
     simulationInitialized = true;
-    if (DEBUG) LOG_INFO("Demo initialized with grid: " + std::to_string(settings.gridWidth) + "x" + std::to_string(settings.gridHeight));
+    if (DEBUG_MODE) LOG_INFO("Demo initialized with grid: " + std::to_string(settings.gridWidth) + "x" + std::to_string(settings.gridHeight));
 }
 
 void initializeFonts() {
@@ -258,11 +262,15 @@ void initializeFonts() {
     infoText->setFillColor(sf::Color::White);
     infoText->setPosition(sf::Vector2f(10, 10));
     
+    // Initialize simulation speed slider (available to all players)
+    // Position at bottom-left of screen (will be updated dynamically during render)
+    simSpeedSlider = new UISlider();
+    simSpeedSlider->initialize(10, 10, 300, 0.1f, 5.0f, 1.0f, "Sim Speed:", font);
+    
     // Initialize developer tools (only in DEVELOPER_MODE)
 #if DEVELOPER_MODE
     if (isAdminMode) {
-        timeStepSlider = new UISlider();
-        timeStepSlider->initialize(10, 960, 300, 0.01f, 0.5f, 0.05f, "Sim Time Step:", font);
+        // Developer mode tools can be added here if needed
     }
     
     // Initialize element inspector text
@@ -307,9 +315,9 @@ void initializeFonts() {
         tileMap.setTile(x, 5, gasTile);
     }
     
-    if (DEBUG) std::cout << "Tilemap setup complete" << std::endl;
+    if (DEBUG_MODE) std::cout << "Tilemap setup complete" << std::endl;
     
-    if (DEBUG) LOG_INFO("Demo initialized");
+    if (DEBUG_MODE) LOG_INFO("Demo initialized");
 }
 
 void handleMouseInput(const sf::Event& event) {
@@ -319,9 +327,15 @@ void handleMouseInput(const sf::Event& event) {
             // Get mouse position in screen coordinates
             sf::Vector2i mousePos = sf::Mouse::getPosition(renderer.getRenderWindow());
             
-            // Convert to tile coordinates (32px tiles)
-            int tileX = mousePos.x / 32;
-            int tileY = mousePos.y / 32;
+            // CRITICAL FIX: Convert screen coordinates to world coordinates using camera
+            sf::Vector2f worldPos = renderer.getCamera().screenToWorld(
+                static_cast<float>(mousePos.x), 
+                static_cast<float>(mousePos.y)
+            );
+            
+            // Convert world coordinates to tile coordinates (32px tiles)
+            int tileX = static_cast<int>(worldPos.x / 32.0f);
+            int tileY = static_cast<int>(worldPos.y / 32.0f);
             
             if (simGrid.isValidPosition(tileX, tileY)) {
                 if (mouseButton->button == sf::Mouse::Button::Left) {
@@ -372,7 +386,7 @@ void handleMouseInput(const sf::Event& event) {
                     // UNLOCK grid after modifications
                     simGrid.unlock();
                     
-                    if (DEBUG) std::cout << "Placed " << name << " at (" << tileX << ", " << tileY << ")" << std::endl;
+                    if (DEBUG_MODE) std::cout << "Placed " << name << " at (" << tileX << ", " << tileY << ")" << std::endl;
                 } else if (mouseButton->button == sf::Mouse::Button::Right) {
                     // THREAD-SAFE: Lock grid before clearing cells
                     simGrid.lock();
@@ -532,11 +546,13 @@ void updateElementInspector() {
 }
 
 void updateSimulation(float deltaTime) {
-    // Apply admin time step override if in admin mode
-    float simDeltaTime = deltaTime;
-    if (isAdminMode && timeStepSlider) {
-        simDeltaTime = timeStepSlider->currentValue;
+    // Apply simulation speed multiplier from slider
+    float simSpeed = 1.0f;
+    if (simSpeedSlider) {
+        simSpeed = simSpeedSlider->currentValue;
     }
+    
+    float simDeltaTime = deltaTime * simSpeed;
     
     // Update all simulation systems
     simManager.update(simDeltaTime);
@@ -584,13 +600,41 @@ void renderDemo() {
             info += " F1:ToggleUI F2:Inspector";
         }
         infoText->setString(info);
+        
+        // Reset view to screen coordinates for UI
+        sf::View defaultView = renderer.getRenderWindow().getDefaultView();
+        renderer.getRenderWindow().setView(defaultView);
         renderer.drawText(*infoText);
+        
+        // Restore camera view for game rendering
+        renderer.getCamera().applyTo(renderer.getRenderWindow());
     }
     
-    // Render admin UI (only in admin mode)
-    if (isAdminMode && timeStepSlider) {
-        timeStepSlider->render(renderer);
+    // Render simulation speed slider (always visible during gameplay)
+    if (simSpeedSlider && gameState == GameState::Playing) {
+        // Update slider position to bottom of screen dynamically
+        sf::Vector2u windowSize = renderer.getRenderWindow().getSize();
+        float sliderY = static_cast<float>(windowSize.y) - 50.0f;  // 50px from bottom
+        simSpeedSlider->track.setPosition(sf::Vector2f(10.0f, sliderY));
+        simSpeedSlider->updateThumbPosition();
+        simSpeedSlider->label->setPosition(sf::Vector2f(10.0f, sliderY - 25.0f));
+        simSpeedSlider->valueText->setPosition(sf::Vector2f(320.0f, sliderY - 2.0f));
+        
+        // Reset view to screen coordinates for UI
+        sf::View defaultView = renderer.getRenderWindow().getDefaultView();
+        renderer.getRenderWindow().setView(defaultView);
+        simSpeedSlider->render(renderer);
+        
+        // Restore camera view for game rendering
+        renderer.getCamera().applyTo(renderer.getRenderWindow());
     }
+    
+    // Render admin UI (developer mode only)
+#if DEVELOPER_MODE
+    if (isAdminMode) {
+        // Additional developer tools can be rendered here
+    }
+#endif
     
     // Render element inspector (dev mode)
 #if DEVELOPER_MODE
@@ -604,13 +648,12 @@ void renderDemo() {
 
 int main() {
     try {
-        // Set logger to only show warnings and errors (set to DEBUG to see everything)
-        if (!DEBUG) {
-            Logger::getInstance().setLogLevel(LogLevel::WARNING);
-        }
+        // TEMPORARY: Force debug logging to see window creation info
+        Logger::getInstance().setLogLevel(LogLevel::DEBUG);
+        std::cout << "[DEBUG] Logger level set to DEBUG" << std::endl;
         
-        if (DEBUG) std::cout << "=== Game Engine Starting ===" << std::endl;
-        if (DEBUG) LOG_INFO("Starting Game Engine");
+        if (DEBUG_MODE) std::cout << "=== Game Engine Starting ===" << std::endl;
+        if (DEBUG_MODE) LOG_INFO("Starting Game Engine");
         
         // Load settings
         SettingsManager::getInstance().loadSettings();
@@ -630,7 +673,7 @@ int main() {
         // Initialize engine
         engine.initialize(config);
         
-        if (DEBUG) LOG_INFO("Engine initialized, setting up renderer...");
+        if (DEBUG_MODE) LOG_INFO("Engine initialized, setting up renderer...");
         
         // Initialize renderer with engine window
         renderer.initialize(engine.getWindow().getRenderWindow());
@@ -654,7 +697,7 @@ int main() {
             simulationInitialized = true;
         }
         
-        if (DEBUG) LOG_INFO("Renderer and menu initialized, starting game loop...");
+        if (DEBUG_MODE) LOG_INFO("Renderer and menu initialized, starting game loop...");
         
         // Game state starts at Menu
         gameState = GameState::Menu;
@@ -797,22 +840,36 @@ int main() {
                     }
                 }
                 
-                // Handle slider input (developer mode only)
-#if DEVELOPER_MODE
-                if (isAdminMode && timeStepSlider) {
+                // Handle simulation speed slider input (always active)
+                if (simSpeedSlider) {
                     if (event.is<sf::Event::MouseButtonPressed>()) {
                         sf::Vector2i mousePos = sf::Mouse::getPosition(renderer.getRenderWindow());
-                        timeStepSlider->handleMousePress(sf::Vector2f(mousePos.x, mousePos.y));
+                        simSpeedSlider->handleMousePress(sf::Vector2f(mousePos.x, mousePos.y));
                     } else if (event.is<sf::Event::MouseButtonReleased>()) {
-                        timeStepSlider->handleMouseRelease();
+                        simSpeedSlider->handleMouseRelease();
                     } else if (event.is<sf::Event::MouseMoved>()) {
                         auto mouseMove = event.getIf<sf::Event::MouseMoved>();
                         if (mouseMove) {
-                            timeStepSlider->handleMouseMove(sf::Vector2f(mouseMove->position.x, mouseMove->position.y));
+                            simSpeedSlider->handleMouseMove(sf::Vector2f(mouseMove->position.x, mouseMove->position.y));
                         }
                     }
                 }
-#endif
+                
+                // Handle +/- hotkeys for simulation speed
+                if (event.is<sf::Event::KeyPressed>()) {
+                    auto keyEvent = event.getIf<sf::Event::KeyPressed>();
+                    if (keyEvent && simSpeedSlider) {
+                        if (keyEvent->scancode == sf::Keyboard::Scancode::Equal) {
+                            simSpeedSlider->currentValue = std::min(5.0f, simSpeedSlider->currentValue + 0.1f);
+                            simSpeedSlider->updateThumbPosition();
+                            simSpeedSlider->updateValueText();
+                        } else if (keyEvent->scancode == sf::Keyboard::Scancode::Hyphen) {
+                            simSpeedSlider->currentValue = std::max(0.1f, simSpeedSlider->currentValue - 0.1f);
+                            simSpeedSlider->updateThumbPosition();
+                            simSpeedSlider->updateValueText();
+                        }
+                    }
+                }
                 
                 handleMouseInput(event);
             }
@@ -852,6 +909,11 @@ int main() {
                 sf::Vector2u windowSize = renderer.getRenderWindow().getSize();
                 renderer.getCamera().handleMouseEdge(sf::Vector2f(mousePos.x, mousePos.y), windowSize);
                 
+                // Update LOD chunk manager with current camera position
+                sf::Vector2f camPos = renderer.getCamera().getPosition();
+                sf::Vector2f viewSize = renderer.getCamera().getView().getSize();
+                simManager.setCameraPosition(camPos.x, camPos.y, viewSize.x, viewSize.y);
+                
                 // Update simulation
                 updateSimulation(deltaTime);
             }
@@ -860,21 +922,26 @@ int main() {
         engine.onRender = []() {
             try {
                 if (gameState == GameState::Menu) {
-                    renderer.beginFrame();
+                    // FIXED: Main menu renders in screen coordinates (no camera transform)
+                    renderer.beginFrame(false);  // Don't apply camera for menu
                     mainMenu.render(renderer);
                     renderer.endFrame();
                 } else if (gameState == GameState::Playing) {
                     renderDemo();
                 } else if (gameState == GameState::Paused) {
                     renderDemo();
-                    renderer.beginFrame();
+                    // FIXED: Reset view to screen coordinates before rendering pause menu overlay
+                    sf::View defaultView = renderer.getRenderWindow().getDefaultView();
+                    renderer.getRenderWindow().setView(defaultView);
                     pauseMenu.render(renderer);
-                    renderer.endFrame();
                 } else if (gameState == GameState::Settings) {
                     if (simulationInitialized) {
                         renderDemo();
+                        // FIXED: Reset view to screen coordinates before rendering settings menu overlay
+                        sf::View defaultView = renderer.getRenderWindow().getDefaultView();
+                        renderer.getRenderWindow().setView(defaultView);
                     } else {
-                        renderer.beginFrame();
+                        renderer.beginFrame(false);  // Don't apply camera for settings menu
                     }
                     settingsMenu.render(renderer);
                     renderer.endFrame();

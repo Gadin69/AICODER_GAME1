@@ -21,6 +21,9 @@ bool GasSim::update(float deltaTime) {
         for (int x = 1; x < width - 1; ++x) {
             if (!grid->isValidPosition(x, y)) continue;
             
+            // LOD CHECK: Skip cells based on camera distance
+            if (!shouldUpdateCell(x, y, deltaTime)) continue;
+            
             Cell& cell = grid->getCell(x, y);
             
             // Only process gas cells

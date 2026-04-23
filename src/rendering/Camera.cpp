@@ -109,10 +109,17 @@ void Camera::update(float deltaTime) {
     position.x += velocity.x * deltaTime;
     position.y += velocity.y * deltaTime;
     
-    // Clamp to grid bounds if set
+    // Clamp to extended bounds (grid + half view size for empty space viewing)
+    // This allows camera to scroll past grid edges into empty space
     if (hasGridBounds) {
-        position.x = std::max(gridMinX, std::min(gridMaxX, position.x));
-        position.y = std::max(gridMinY, std::min(gridMaxY, position.y));
+        sf::Vector2f viewSize = view.getSize();
+        float extendedMinX = gridMinX - viewSize.x / 2.0f;
+        float extendedMaxX = gridMaxX + viewSize.x / 2.0f;
+        float extendedMinY = gridMinY - viewSize.y / 2.0f;
+        float extendedMaxY = gridMaxY + viewSize.y / 2.0f;
+        
+        position.x = std::max(extendedMinX, std::min(extendedMaxX, position.x));
+        position.y = std::max(extendedMinY, std::min(extendedMaxY, position.y));
     }
     
     // Update view
