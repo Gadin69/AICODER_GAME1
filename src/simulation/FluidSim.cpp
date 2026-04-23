@@ -17,38 +17,231 @@ bool FluidSim::update(float deltaTime) {
     int width = grid->getWidth();
     int height = grid->getHeight();
     
+    // LIQUID FLOW SYSTEM: Mass-transfer based flow (like gas, but inverted for gravity)
+    // Priority: DOWN, DOWN-DIAGONALS, SIDEWAYS
+    // Mass transfer rate based on viscosity
+    
+    struct FlowAction {
+        int fromX, fromY;
+        int toX, toY;
+        float massToMove;
+        float temperature;
+        ElementType type;
+        bool isMerge;  // true = merge into target, false = swap
+    };
+    
+    std::vector<FlowAction> flowActions;
+    flowActions.reserve(width * height / 4);
+    
+    // Random seed for direction choice
+    static unsigned int fluidRandomSeed = 42;
+    auto simpleRand = []() -> int {
+        fluidRandomSeed = fluidRandomSeed * 1103515245 + 12345;
+        return (fluidRandomSeed / 65536) % 32768;
+    };
+    
     for (int y = 1; y < height - 1; ++y) {
         for (int x = 1; x < width - 1; ++x) {
             if (!grid->isValidPosition(x, y)) continue;
             
-            // LOD CHECK: Skip cells based on camera distance
-            if (!shouldUpdateCell(x, y, deltaTime)) continue;
-            
             Cell& cell = grid->getCell(x, y);
-            
-            // Only process liquids
             if (!isLiquidType(cell.elementType)) continue;
             
-            // VISCOSITY-BASED FLOW: High viscosity = slower movement
-            // ONI-STYLE: Mass also affects flow speed!
-            // Less mass = flows faster, more mass = flows slower
+            float cellMass = cell.mass;
             const Element& props = ElementTypes::getElement(cell.elementType);
             
-            // Calculate flow probability based on viscosity AND mass
-            // Low viscosity + low mass = high probability (flows fast)
-            // High viscosity + high mass = low probability (flows slow)
-            // TIME-SCALED: Adjust probability by deltaTime for frame-rate independence
-            float massRatio = cell.mass / props.density;  // 0.0 to 1.0 (partial to full)
-            float baseProbability = (1.0f / (1.0f + props.viscosity * 0.5f)) * massRatio;
-            float moveProbability = baseProbability * (deltaTime / 0.1f);  // Normalize to 100ms base rate
+            // VISCOSITY-BASED FLOW RATE
+            // Low viscosity (water=1.0) = fast flow, High viscosity (honey=100) = slow flow
+            // Flow rate = portion of mass that can move this tick
+            float flowRate = 1.0f / (1.0f + props.viscosity * 0.1f);  // 0.0 to 1.0
+            float massToFlow = cellMass * flowRate;
             
-            // Use random to determine if fluid moves this tick
-            static thread_local std::mt19937 rng(42);
-            std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+            // Minimum mass to flow (prevent micro-transfers)
+            if (massToFlow < 0.001f) continue;
             
-            if (dist(rng) < moveProbability) {
-                // Update liquid physics
-                updateLiquid(x, y);
+            // PRIORITY ORDER: DOWN, DOWN-DIAGONAL (random), SIDEWAYS (random)
+            // Total: 5 directions
+            int directions[5][2];
+            int dirCount = 0;
+            
+            // DOWN first (gravity - liquids MUST fall)
+            directions[dirCount][0] = 0; directions[dirCount][1] = 1; dirCount++;
+            
+            // DOWN-DIAGONAL (randomize left/right)
+            if (simpleRand() % 2 == 0) {
+                directions[dirCount][0] = -1; directions[dirCount][1] = 1; dirCount++;
+                directions[dirCount][0] = 1; directions[dirCount][1] = 1; dirCount++;
+            } else {
+                directions[dirCount][0] = 1; directions[dirCount][1] = 1; dirCount++;
+                directions[dirCount][0] = -1; directions[dirCount][1] = 1; dirCount++;
+            }
+            
+            // SIDEWAYS (randomize left/right)
+            if (simpleRand() % 2 == 0) {
+                directions[dirCount][0] = -1; directions[dirCount][1] = 0; dirCount++;
+                directions[dirCount][0] = 1; directions[dirCount][1] = 0; dirCount++;
+            } else {
+                directions[dirCount][0] = 1; directions[dirCount][1] = 0; dirCount++;
+                directions[dirCount][0] = -1; directions[dirCount][1] = 0; dirCount++;
+            }
+            
+            // Try each direction in priority order
+            float remainingMass = massToFlow;
+            for (int i = 0; i < dirCount && remainingMass > 0.001f; i++) {
+                int nx = x + directions[i][0];
+                int ny = y + directions[i][1];
+                
+                if (!grid->isValidPosition(nx, ny)) continue;
+                
+                Cell& neighbor = grid->getCell(nx, ny);
+                ElementType neighborType = neighbor.elementType;
+                
+                bool isVacuum = (neighborType == ElementType::Vacuum);
+                bool isSameLiquid = isLiquidType(neighborType) && neighborType == cell.elementType;
+                bool isDifferentLiquid = isLiquidType(neighborType) && neighborType != cell.elementType;
+                bool isDisplaceableGas = canDisplace(cell.elementType, neighborType);
+                
+                FlowAction action;
+                action.fromX = x; action.fromY = y;
+                action.toX = nx; action.toY = ny;
+                action.massToMove = 0.0f;
+                action.temperature = cell.temperature;
+                action.type = cell.elementType;
+                action.isMerge = false;
+                
+                if (isVacuum) {
+                    // VACUUM: Move mass into vacuum
+                    action.massToMove = remainingMass;
+                    action.isMerge = false;  // Will swap/move
+                    flowActions.push_back(action);
+                    remainingMass = 0.0f;
+                    break;
+                }
+                else if (isSameLiquid) {
+                    // SAME LIQUID: Merge based on viscosity
+                    float spaceAvailable = 2.0f - neighbor.mass;  // 2kg max
+                    float mergeAmount = std::min(remainingMass, spaceAvailable);
+                    
+                    if (mergeAmount >= 0.001f) {
+                        action.massToMove = mergeAmount;
+                        action.isMerge = true;
+                        flowActions.push_back(action);
+                        remainingMass -= mergeAmount;
+                        // Don't break - can split mass to multiple neighbors
+                    }
+                }
+                else if (isDifferentLiquid) {
+                    // DIFFERENT LIQUID: Swap based on density
+                    const Element& cellProps = ElementTypes::getElement(cell.elementType);
+                    const Element& neighborProps = ElementTypes::getElement(neighborType);
+                    
+                    // Denser liquid sinks through lighter liquid
+                    if (cellProps.density > neighborProps.density) {
+                        action.massToMove = remainingMass;
+                        action.isMerge = false;  // Swap
+                        flowActions.push_back(action);
+                        remainingMass = 0.0f;
+                        break;
+                    }
+                }
+                else if (isDisplaceableGas) {
+                    // GAS: Displace it (liquids are denser)
+                    action.massToMove = remainingMass;
+                    action.isMerge = false;  // Swap
+                    flowActions.push_back(action);
+                    remainingMass = 0.0f;
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Apply all flow actions simultaneously
+    for (const auto& action : flowActions) {
+        Cell& fromCell = grid->getCell(action.fromX, action.fromY);
+        Cell& toCell = grid->getCell(action.toX, action.toY);
+        
+        if (action.isMerge) {
+            // MERGE: Add mass to target
+            float totalMass = toCell.mass + action.massToMove;
+            float newTemp = (toCell.mass * toCell.temperature + action.massToMove * action.temperature) / totalMass;
+            
+            toCell.mass = totalMass;
+            toCell.temperature = newTemp;
+            toCell.updated = true;
+            toCell.updateColor();
+            
+            // Remove mass from source
+            fromCell.mass -= action.massToMove;
+            if (fromCell.mass < 0.001f) {
+                // Source became micro-cell - convert to vacuum
+                fromCell.elementType = ElementType::Vacuum;
+                fromCell.mass = 0.0f;
+                fromCell.temperature = -273.15f;
+                fromCell.velocityX = 0.0f;
+                fromCell.velocityY = 0.0f;
+                fromCell.updated = false;
+                fromCell.targetElementType = ElementType::Empty;
+                fromCell.phaseTransitionProgress = 0.0f;
+                fromCell.phaseTransitionSpeed = 0.0f;
+                fromCell.microMassDecayTime = 0.0f;
+                fromCell.color = sf::Color(10, 10, 15);
+            } else {
+                fromCell.updated = true;
+            }
+        } else {
+            // SWAP/MOVE: Exchange cells
+            if (toCell.elementType == ElementType::Vacuum) {
+                // Moving into vacuum - transfer all data
+                toCell.elementType = fromCell.elementType;
+                toCell.mass = action.massToMove;
+                toCell.temperature = fromCell.temperature;
+                toCell.pressure = 0.0f;
+                toCell.velocityX = 0.0f;
+                toCell.velocityY = 0.0f;
+                toCell.updated = true;
+                toCell.targetElementType = ElementType::Empty;
+                toCell.phaseTransitionProgress = 0.0f;
+                toCell.phaseTransitionSpeed = 0.0f;
+                toCell.microMassDecayTime = 0.0f;
+                toCell.color = fromCell.color;
+                
+                // Source becomes vacuum
+                fromCell.elementType = ElementType::Vacuum;
+                fromCell.mass = 0.0f;
+                fromCell.temperature = -273.15f;
+                fromCell.velocityX = 0.0f;
+                fromCell.velocityY = 0.0f;
+                fromCell.updated = false;
+                fromCell.targetElementType = ElementType::Empty;
+                fromCell.phaseTransitionProgress = 0.0f;
+                fromCell.phaseTransitionSpeed = 0.0f;
+                fromCell.microMassDecayTime = 0.0f;
+                fromCell.color = sf::Color(10, 10, 15);
+            } else {
+                // Swapping with gas or different liquid
+                ElementType tempType = fromCell.elementType;
+                float tempMass = fromCell.mass;
+                float tempTemp = fromCell.temperature;
+                float tempVelX = fromCell.velocityX;
+                float tempVelY = fromCell.velocityY;
+                sf::Color tempColor = fromCell.color;
+                
+                fromCell.elementType = toCell.elementType;
+                fromCell.mass = toCell.mass;
+                fromCell.temperature = toCell.temperature;
+                fromCell.velocityX = toCell.velocityX;
+                fromCell.velocityY = toCell.velocityY;
+                fromCell.color = toCell.color;
+                fromCell.updated = true;
+                
+                toCell.elementType = tempType;
+                toCell.mass = tempMass;
+                toCell.temperature = tempTemp;
+                toCell.velocityX = tempVelX;
+                toCell.velocityY = tempVelY;
+                toCell.color = tempColor;
+                toCell.updated = true;
             }
         }
     }
