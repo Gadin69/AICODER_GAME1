@@ -200,7 +200,7 @@ void SettingsMenu::buildMenu() {
     cameraAccelSlider.initialize(
         (windowWidth - sliderWidth) / 2.0f, sliderY + spacing * 1.5f,
         sliderWidth,
-        100.0f, 1000.0f, 400.0f,
+        100.0f, 1000.0f, settings.cameraAcceleration,
         "Camera Acceleration:", font
     );
     
@@ -208,7 +208,7 @@ void SettingsMenu::buildMenu() {
     cameraMaxSpeedSlider.initialize(
         (windowWidth - sliderWidth) / 2.0f, sliderY + spacing * 3.0f,
         sliderWidth,
-        200.0f, 1200.0f, 600.0f,
+        200.0f, 1200.0f, settings.cameraMaxSpeed,
         "Camera Max Speed:", font
     );
     

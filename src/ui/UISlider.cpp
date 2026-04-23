@@ -30,7 +30,6 @@ void UISlider::initialize(float x, float y, float width, float minVal, float max
     thumb.setFillColor(sf::Color(200, 200, 200));
     thumb.setOutlineColor(sf::Color(255, 255, 255));
     thumb.setOutlineThickness(1.0f);
-    updateThumbPosition();
     
     // Label
     label = new sf::Text(font, labelText, 18);
@@ -40,10 +39,14 @@ void UISlider::initialize(float x, float y, float width, float minVal, float max
     // Value text
     valueText = new sf::Text(font, "", 18);
     valueText->setFillColor(sf::Color(255, 255, 100));
-    updateValueText();
     valueText->setPosition(sf::Vector2f(x + width + 10.0f, y - 2.0f));
     
+    // Mark as initialized BEFORE calling update functions
     initialized = true;
+    
+    // Now update thumb position and value text
+    updateThumbPosition();
+    updateValueText();
 }
 
 void UISlider::render(Renderer& renderer) {
