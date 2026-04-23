@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SimulationSystem.h"
+#include <vector>
 
 // Heat simulation system - handles thermodynamics
 // Responsible for: heat transfer, temperature changes, phase change triggers
@@ -20,7 +21,6 @@ private:
     float ambientTemp;  // Environmental temperature
     
     // Internal heat transfer functions
-    void transferHeat(int x, int y, float deltaTime);
     void applyEnvironmentalCooling(int x, int y, float deltaTime);
     void checkPhaseChangeTriggers(int x, int y);
     void startPhaseTransition(Cell& cell, ElementType targetType, float transitionSpeed);

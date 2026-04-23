@@ -261,7 +261,13 @@ void handleMouseInput(const sf::Event& event) {
                     
                     // ONI-STYLE: Set initial MASS (full cell by default)
                     // Mass = density × volume (1m³ per cell)
-                    placedCell.mass = props.density;  // Full cell
+                    // SAFETY: Ensure minimum mass to prevent division by zero in heat sim
+                    placedCell.mass = std::max(props.density, 1.0f);  // Full cell, minimum 1kg
+                    
+                    // DEBUG: Log placement
+                    std::cout << "[PLACE] " << props.name << " at (" << tileX << "," << tileY 
+                              << ") temp=" << placedCell.temperature 
+                              << " mass=" << placedCell.mass << std::endl;
                     
                     // Update tile directly
                     sf::Color color = sf::Color::Transparent;
@@ -552,16 +558,10 @@ void renderDemo() {
     }
     
     // Render simulation speed slider (always visible during gameplay)
-    std::cout << "[SLIDER CHECK] simSpeedSlider: " << (simSpeedSlider ? "NOT NULL" : "NULL") 
-             << " gameState: " << static_cast<int>(gameState) << std::endl;
-    
     if (simSpeedSlider && (gameState == GameState::Playing || gameState == GameState::Paused)) {
         // Update slider position to bottom of screen dynamically
         sf::Vector2u windowSize = renderer.getRenderWindow().getSize();
         float sliderY = static_cast<float>(windowSize.y) - 50.0f;  // 50px from bottom
-        
-        std::cout << "[SLIDER] Window: " << windowSize.x << "x" << windowSize.y 
-                 << " SliderY: " << sliderY << std::endl;
         
         simSpeedSlider->track.setPosition(sf::Vector2f(10.0f, sliderY));
         simSpeedSlider->updateThumbPosition();
@@ -571,9 +571,6 @@ void renderDemo() {
         // Reset view to screen coordinates for UI overlay
         sf::View defaultView = renderer.getRenderWindow().getDefaultView();
         renderer.getRenderWindow().setView(defaultView);
-        
-        std::cout << "[SLIDER] Track pos: " << simSpeedSlider->track.getPosition().x << "," 
-                 << simSpeedSlider->track.getPosition().y << std::endl;
         
         simSpeedSlider->render(renderer);
         

@@ -18,7 +18,24 @@ bool HeatSim::update(float deltaTime) {
     int width = grid->getWidth();
     int height = grid->getHeight();
     
-    // Update heat for all cells
+    // STABLE FTCS HEAT TRANSFER using weighted averaging method:
+    // Step 1: Create snapshot of all temperatures
+    // Step 2: Calculate new temperatures using weighted average
+    // Step 3: Apply all updates simultaneously
+    
+    // STEP 1: Temperature snapshot buffer (read all current temps)
+    std::vector<std::vector<float>> tempSnapshot(height, std::vector<float>(width));
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            if (grid->isValidPosition(x, y)) {
+                tempSnapshot[y][x] = grid->getCell(x, y).temperature;
+            }
+        }
+    }
+    
+    // STEP 2: Calculate new temperatures
+    std::vector<std::vector<float>> newTemps(height, std::vector<float>(width, 0.0f));
+    
     for (int y = 1; y < height - 1; ++y) {
         for (int x = 1; x < width - 1; ++x) {
             if (!grid->isValidPosition(x, y)) continue;
@@ -30,10 +47,92 @@ bool HeatSim::update(float deltaTime) {
             if (cell.elementType == ElementType::Empty) continue;
             
             // Skip vacuum - no heat transfer
+            if (cell.elementType == ElementType::Vacuum) {
+                newTemps[y][x] = tempSnapshot[y][x];  // Keep current temp
+                continue;
+            }
+            
+            // Calculate stable heat transfer using weighted averaging
+            const Element& cellProps = ElementTypes::getElement(cell.elementType);
+            float cellThermalMass = std::max(cell.mass * cellProps.specificHeatCapacity, 0.001f);
+            
+            // Weighted sum of temperatures
+            float weightedSum = 0.0f;
+            float totalWeight = 0.0f;
+            
+            // Center cell contribution (weighted by thermal mass)
+            weightedSum += tempSnapshot[y][x] * cellThermalMass;
+            totalWeight += cellThermalMass;
+            
+            // Check all 4 neighbors
+            int neighbors[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+            
+            for (auto& neighbor : neighbors) {
+                int nx = x + neighbor[0];
+                int ny = y + neighbor[1];
+                
+                if (!grid->isValidPosition(nx, ny)) continue;
+                
+                const Cell& neighborCell = grid->getCell(nx, ny);
+                if (neighborCell.elementType == ElementType::Vacuum) continue;
+                if (neighborCell.elementType == ElementType::Empty) continue;
+                
+                const Element& neighborProps = ElementTypes::getElement(neighborCell.elementType);
+                float neighborThermalMass = std::max(neighborCell.mass * neighborProps.specificHeatCapacity, 0.001f);
+                
+                // Calculate thermal conductance between cells
+                float avgConductivity = (cellProps.thermalConductivity + neighborProps.thermalConductivity) * 0.5f;
+                float avgThermalMass = (cellThermalMass + neighborThermalMass) * 0.5f;
+                
+                // Weight = conductivity * thermal mass (higher = more influence)
+                float conductance = avgConductivity * avgThermalMass;
+                
+                weightedSum += tempSnapshot[ny][nx] * conductance;
+                totalWeight += conductance;
+            }
+            
+            // Calculate weighted average temperature
+            float equilibriumTemp = weightedSum / totalWeight;
+            
+            // LAVA/WATER SPECIAL CASE: Film boiling increases transfer rate
+            bool hasExtremeInteraction = false;
+            for (auto& neighbor : neighbors) {
+                int nx = x + neighbor[0];
+                int ny = y + neighbor[1];
+                if (grid->isValidPosition(nx, ny)) {
+                    const Cell& n = grid->getCell(nx, ny);
+                    if ((cell.elementType == ElementType::Liquid_Lava && n.elementType == ElementType::Liquid_Water) ||
+                        (cell.elementType == ElementType::Liquid_Water && n.elementType == ElementType::Liquid_Lava)) {
+                        hasExtremeInteraction = true;
+                        break;
+                    }
+                }
+            }
+            
+            // BLEND old and new temperature (prevents oscillation)
+            // Blend factor determines how quickly we approach equilibrium
+            float baseBlend = cellProps.thermalConductivity * deltaTime * 0.5f;
+            float blendFactor = hasExtremeInteraction ? std::min(baseBlend * 5.0f, 0.5f) : std::min(baseBlend, 0.5f);
+            
+            // Apply blending (guaranteed stable when blend <= 0.5)
+            newTemps[y][x] = tempSnapshot[y][x] * (1.0f - blendFactor) + equilibriumTemp * blendFactor;
+            
+            // Clamp to absolute zero
+            newTemps[y][x] = std::max(newTemps[y][x], -273.15f);
+        }
+    }
+    
+    // STEP 3: Apply all temperature updates simultaneously
+    for (int y = 1; y < height - 1; ++y) {
+        for (int x = 1; x < width - 1; ++x) {
+            if (!grid->isValidPosition(x, y)) continue;
+            
+            Cell& cell = grid->getCell(x, y);
+            if (cell.elementType == ElementType::Empty) continue;
             if (cell.elementType == ElementType::Vacuum) continue;
             
-            // Transfer heat with neighbors
-            transferHeat(x, y, deltaTime);
+            // Apply calculated temperature
+            cell.temperature = newTemps[y][x];
             
             // Apply environmental cooling/heating
             applyEnvironmentalCooling(x, y, deltaTime);
@@ -55,73 +154,7 @@ void HeatSim::setAmbientTemperature(float temp) {
     ambientTemp = temp;
 }
 
-void HeatSim::transferHeat(int x, int y, float deltaTime) {
-    Cell& cell = grid->getCell(x, y);
-    const Element& cellProps = ElementTypes::getElement(cell.elementType);
-    
-    // ONI-STYLE: Use CELL MASS (dynamic, not fixed by density!)
-    // A cell can be half-full, so mass varies
-    // Thermal mass = actual mass × specific heat
-    float cellThermalMass = cell.mass * cellProps.specificHeatCapacity;
-    float cellEnergy = cellThermalMass * cell.temperature;  // Total energy in Joules
-    
-    // Check all 4 neighbors
-    int neighbors[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
-    
-    for (auto& neighbor : neighbors) {
-        int nx = x + neighbor[0];
-        int ny = y + neighbor[1];
-        
-        if (!grid->isValidPosition(nx, ny)) continue;
-        
-        Cell& neighborCell = grid->getCell(nx, ny);
-        
-        // Skip vacuum cells (no heat transfer)
-        if (neighborCell.elementType == ElementType::Vacuum) continue;
-        
-        const Element& neighborProps = ElementTypes::getElement(neighborCell.elementType);
-        
-        // Calculate temperature difference
-        float tempDiff = cell.temperature - neighborCell.temperature;
-        
-        // Only transfer if meaningful difference
-        if (std::abs(tempDiff) < 0.5f) continue;
-        
-        // NEIGHBOR THERMAL MASS (using actual cell mass!)
-        float neighborThermalMass = neighborCell.mass * neighborProps.specificHeatCapacity;
-        float neighborEnergy = neighborThermalMass * neighborCell.temperature;
-        
-        // ENERGY-BASED HEAT TRANSFER:
-        // Heat flows from hot to cold until equilibrium
-        // Equilibrium temperature = (E1 + E2) / (m1*cp1 + m2*cp2)
-        float totalEnergy = cellEnergy + neighborEnergy;
-        float totalThermalMass = cellThermalMass + neighborThermalMass;
-        float equilibriumTemp = totalEnergy / totalThermalMass;
-        
-        // But transfer is limited by thermal conductivity!
-        // Real heat transfer: q = k × A × ΔT / d (Fourier's Law)
-        float avgConductivity = (cellProps.thermalConductivity + neighborProps.thermalConductivity) * 0.5f;
-        
-        // LAVA/WATER SPECIAL CASE: Film boiling increases transfer
-        bool extremeInteraction = 
-            (cell.elementType == ElementType::Liquid_Lava && neighborCell.elementType == ElementType::Liquid_Water) ||
-            (cell.elementType == ElementType::Liquid_Water && neighborCell.elementType == ElementType::Liquid_Lava);
-        
-        float conductivityMultiplier = extremeInteraction ? 5.0f : 1.0f;
-        
-        // SLOW HEAT TRANSFER: Only move toward equilibrium gradually
-        // Higher thermal mass = slower to change temperature
-        // TIME-SCALED: Multiply by deltaTime for frame-rate independence
-        float transferRate = avgConductivity * conductivityMultiplier * 0.01f * deltaTime;
-        
-        // Energy to transfer (limited by conductivity)
-        float energyToTransfer = (equilibriumTemp - cell.temperature) * cellThermalMass * transferRate;
-        
-        // Apply energy transfer
-        cell.temperature -= energyToTransfer / cellThermalMass;
-        neighborCell.temperature += energyToTransfer / neighborThermalMass;
-    }
-}
+
 
 void HeatSim::applyEnvironmentalCooling(int x, int y, float deltaTime) {
     Cell& cell = grid->getCell(x, y);
