@@ -69,6 +69,13 @@ void FluidSim::updateLiquid(int x, int y) {
     
     // Apply viscosity effects
     applyViscosity(x, y);
+    
+    // Corner leaking: seep through diagonal gaps (last resort)
+    // Only attempt if we still have mass (didn't fully move)
+    Cell& cell = grid->getCell(x, y);
+    if (isLiquidType(cell.elementType) && cell.mass > 0.01f) {
+        leakLiquidDiagonally(x, y, 0.1f);  // Use base update interval
+    }
 }
 
 void FluidSim::moveLiquidDown(int x, int y) {
@@ -88,15 +95,19 @@ void FluidSim::moveLiquidDown(int x, int y) {
         belowCell.temperature = cell.temperature;
         belowCell.color = cell.color;
         
-        // Source becomes vacuum - reset ALL data to vacuum defaults
+        // Source becomes vacuum - reset ALL data to vacuum defaults (COMPLETE cleanup)
         cell.elementType = ElementType::Vacuum;
         cell.mass = 0.0f;
-        cell.gasMass = 0.0f;
         cell.pressure = 0.0f;
-        cell.temperature = -273.15f;  // Absolute zero (safe now - no environmental cooling)
+        cell.temperature = -273.15f;
         cell.velocityX = 0.0f;
         cell.velocityY = 0.0f;
-        cell.updateColor();  // Update color to vacuum!
+        cell.updated = false;
+        cell.targetElementType = ElementType::Empty;
+        cell.phaseTransitionProgress = 0.0f;
+        cell.phaseTransitionSpeed = 0.0f;
+        cell.microMassDecayTime = 0.0f;
+        cell.color = sf::Color(10, 10, 15);
         return;
     }
     
@@ -135,15 +146,19 @@ void FluidSim::moveLiquidSideways(int x, int y) {
             belowNeighbor.temperature = cell.temperature;
             belowNeighbor.color = cell.color;
             
-            // Source becomes vacuum - reset ALL data
+            // Source becomes vacuum - reset ALL data (COMPLETE cleanup)
             cell.elementType = ElementType::Vacuum;
             cell.mass = 0.0f;
-            cell.gasMass = 0.0f;
             cell.pressure = 0.0f;
-            cell.temperature = -273.15f;  // Absolute zero
+            cell.temperature = -273.15f;
             cell.velocityX = 0.0f;
             cell.velocityY = 0.0f;
-            cell.updateColor();  // Update color to vacuum!
+            cell.updated = false;
+            cell.targetElementType = ElementType::Empty;
+            cell.phaseTransitionProgress = 0.0f;
+            cell.phaseTransitionSpeed = 0.0f;
+            cell.microMassDecayTime = 0.0f;
+            cell.color = sf::Color(10, 10, 15);
             return;
         }
         
@@ -154,15 +169,19 @@ void FluidSim::moveLiquidSideways(int x, int y) {
             neighbor.temperature = cell.temperature;
             neighbor.color = cell.color;
             
-            // Source becomes vacuum - reset ALL data
+            // Source becomes vacuum - reset ALL data (COMPLETE cleanup)
             cell.elementType = ElementType::Vacuum;
             cell.mass = 0.0f;
-            cell.gasMass = 0.0f;
             cell.pressure = 0.0f;
-            cell.temperature = -273.15f;  // Absolute zero
+            cell.temperature = -273.15f;
             cell.velocityX = 0.0f;
             cell.velocityY = 0.0f;
-            cell.updateColor();  // Update color to vacuum!
+            cell.updated = false;
+            cell.targetElementType = ElementType::Empty;
+            cell.phaseTransitionProgress = 0.0f;
+            cell.phaseTransitionSpeed = 0.0f;
+            cell.microMassDecayTime = 0.0f;
+            cell.color = sf::Color(10, 10, 15);
             return;
         }
     }
@@ -176,6 +195,74 @@ void FluidSim::applyViscosity(int x, int y) {
     if (props.viscosity > 0.0f) {
         cell.velocityX *= (1.0f - props.viscosity * 0.1f);
         cell.velocityY *= (1.0f - props.viscosity * 0.1f);
+    }
+}
+
+void FluidSim::leakLiquidDiagonally(int x, int y, float deltaTime) {
+    Cell& cell = grid->getCell(x, y);
+    const Element& props = ElementTypes::getElement(cell.elementType);
+    
+    // 2 diagonal directions (DOWNWARD corner-leaking only)
+    // Liquids can only leak diagonally DOWN, never UP
+    int diagonals[2][2] = {
+        {-1, 1}, {1, 1}  // Down-left, Down-right
+    };
+    
+    for (auto& dir : diagonals) {
+        int nx = x + dir[0];
+        int ny = y + dir[1];
+        
+        if (!grid->isValidPosition(nx, ny)) continue;
+        
+        Cell& target = grid->getCell(nx, ny);
+        
+        // Can only leak into vacuum or lighter gases (Darcy's Law inspired)
+        if (target.elementType != ElementType::Vacuum && 
+            !canDisplace(cell.elementType, target.elementType)) {
+            continue;
+        }
+        
+        // Calculate leak probability based on:
+        // - Viscosity: lower viscosity = faster leak
+        // - Mass ratio: more mass = higher pressure = faster leak
+        // - DeltaTime: frame-rate independent
+        float leakProbability = (1.0f / (1.0f + props.viscosity * 2.0f)) * 
+                                (cell.mass / props.density) * 
+                                (deltaTime / 0.1f) * 
+                                0.3f;  // Base leak rate is 30% of normal flow
+        
+        static thread_local std::mt19937 rng(42);
+        std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+        
+        if (dist(rng) < leakProbability) {
+            // Leak small portion of mass through corner (simulates seepage)
+            float leakAmount = cell.mass * 0.15f;  // 15% of mass
+            
+            target.elementType = cell.elementType;
+            target.mass = leakAmount;
+            target.temperature = cell.temperature;
+            target.updateColor();
+            
+            cell.mass -= leakAmount;
+            
+            // If source has very little mass left, become vacuum (COMPLETE cleanup)
+            if (cell.mass < 0.01f) {
+                cell.elementType = ElementType::Vacuum;
+                cell.mass = 0.0f;
+                cell.pressure = 0.0f;
+                cell.temperature = -273.15f;
+                cell.velocityX = 0.0f;
+                cell.velocityY = 0.0f;
+                cell.updated = false;
+                cell.targetElementType = ElementType::Empty;
+                cell.phaseTransitionProgress = 0.0f;
+                cell.phaseTransitionSpeed = 0.0f;
+                cell.microMassDecayTime = 0.0f;
+                cell.color = sf::Color(10, 10, 15);
+            }
+            
+            break;  // Only leak to one diagonal per tick
+        }
     }
 }
 

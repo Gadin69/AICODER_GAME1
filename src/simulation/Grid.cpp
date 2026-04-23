@@ -44,7 +44,6 @@ void Grid::setCellType(int x, int y, ElementType type) {
         // If setting to Vacuum, reset ALL cell data to vacuum defaults
         if (type == ElementType::Vacuum) {
             cells[y][x].mass = 0.0f;
-            cells[y][x].gasMass = 0.0f;
             cells[y][x].pressure = 0.0f;
             cells[y][x].temperature = -273.15f;  // Absolute zero
             cells[y][x].velocityX = 0.0f;
@@ -64,7 +63,8 @@ int Grid::getHeight() const {
 }
 
 bool Grid::isValidPosition(int x, int y) const {
-    return x >= 0 && x < width && y >= 0 && y < height;
+    return 
+    x >= 0 && x < width && y >= 0 && y < height;
 }
 
 void Grid::clear() {
