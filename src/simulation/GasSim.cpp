@@ -90,11 +90,15 @@ void GasSim::mergeGasWithNeighbors(int x, int y) {
             if (combinedMass <= MAX_GAS_MASS && neighbor.gasMass < MIN_GAS_MASS) {
                 // Move neighbor's gas to this cell
                 cell.gasMass += neighbor.gasMass;
+                // Neighbor becomes vacuum - reset ALL data
                 neighbor.gasMass = 0.0f;
-                neighbor.elementType = ElementType::Vacuum;  // Neighbor becomes vacuum
+                neighbor.elementType = ElementType::Vacuum;
                 neighbor.pressure = 0.0f;
                 neighbor.mass = 0.0f;
-                neighbor.updateColor();  // Fix: Update to vacuum color!
+                neighbor.temperature = -273.15f;  // Absolute zero
+                neighbor.velocityX = 0.0f;
+                neighbor.velocityY = 0.0f;
+                neighbor.updateColor();  // Update to vacuum color!
                 break;
             }
         }
@@ -151,13 +155,16 @@ void GasSim::flowGasByPressure(int x, int y) {
             
             cell.gasMass -= transferAmount;
             
-            // If cell has no gas left, it becomes vacuum
+            // If cell has no gas left, it becomes vacuum - reset ALL data
             if (cell.gasMass < MIN_GAS_MASS) {
                 cell.elementType = ElementType::Vacuum;
                 cell.gasMass = 0.0f;
                 cell.pressure = 0.0f;
                 cell.mass = 0.0f;
-                cell.updateColor();  // Fix: Update to vacuum color!
+                cell.temperature = -273.15f;  // Absolute zero
+                cell.velocityX = 0.0f;
+                cell.velocityY = 0.0f;
+                cell.updateColor();  // Update to vacuum color!
             }
         }
     }
@@ -190,13 +197,16 @@ void GasSim::fillVacuumPreferentially(int x, int y) {
             
             cell.gasMass -= expansionAmount;
             
-            // Check if source cell should become vacuum
+            // Check if source cell should become vacuum - reset ALL data
             if (cell.gasMass < MIN_GAS_MASS) {
                 cell.elementType = ElementType::Vacuum;
                 cell.gasMass = 0.0f;
                 cell.pressure = 0.0f;
                 cell.mass = 0.0f;
-                cell.updateColor();  // Fix: Update to vacuum color!
+                cell.temperature = -273.15f;  // Absolute zero
+                cell.velocityX = 0.0f;
+                cell.velocityY = 0.0f;
+                cell.updateColor();  // Update to vacuum color!
             }
             
             break;  // Only expand to one vacuum per tick

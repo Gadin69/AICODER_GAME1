@@ -88,12 +88,15 @@ void FluidSim::moveLiquidDown(int x, int y) {
         belowCell.temperature = cell.temperature;
         belowCell.color = cell.color;
         
-        // Source becomes vacuum with no mass
+        // Source becomes vacuum - reset ALL data to vacuum defaults
         cell.elementType = ElementType::Vacuum;
         cell.mass = 0.0f;
         cell.gasMass = 0.0f;
         cell.pressure = 0.0f;
-        cell.updateColor();  // Fix: Update color to vacuum!
+        cell.temperature = -273.15f;  // Absolute zero (safe now - no environmental cooling)
+        cell.velocityX = 0.0f;
+        cell.velocityY = 0.0f;
+        cell.updateColor();  // Update color to vacuum!
         return;
     }
     
@@ -132,11 +135,15 @@ void FluidSim::moveLiquidSideways(int x, int y) {
             belowNeighbor.temperature = cell.temperature;
             belowNeighbor.color = cell.color;
             
+            // Source becomes vacuum - reset ALL data
             cell.elementType = ElementType::Vacuum;
             cell.mass = 0.0f;
             cell.gasMass = 0.0f;
             cell.pressure = 0.0f;
-            cell.updateColor();  // Fix: Update color to vacuum!
+            cell.temperature = -273.15f;  // Absolute zero
+            cell.velocityX = 0.0f;
+            cell.velocityY = 0.0f;
+            cell.updateColor();  // Update color to vacuum!
             return;
         }
         
@@ -147,11 +154,15 @@ void FluidSim::moveLiquidSideways(int x, int y) {
             neighbor.temperature = cell.temperature;
             neighbor.color = cell.color;
             
+            // Source becomes vacuum - reset ALL data
             cell.elementType = ElementType::Vacuum;
             cell.mass = 0.0f;
             cell.gasMass = 0.0f;
             cell.pressure = 0.0f;
-            cell.updateColor();  // Fix: Update color to vacuum!
+            cell.temperature = -273.15f;  // Absolute zero
+            cell.velocityX = 0.0f;
+            cell.velocityY = 0.0f;
+            cell.updateColor();  // Update color to vacuum!
             return;
         }
     }

@@ -134,8 +134,8 @@ bool HeatSim::update(float deltaTime) {
             // Apply calculated temperature
             cell.temperature = newTemps[y][x];
             
-            // Apply environmental cooling/heating
-            applyEnvironmentalCooling(x, y, deltaTime);
+            // Environmental cooling removed - vacuum is a perfect insulator
+            // Cells only exchange heat with neighboring cells, not environment
             
             // Check if temperature triggers phase change
             checkPhaseChangeTriggers(x, y);
@@ -156,32 +156,6 @@ void HeatSim::setAmbientTemperature(float temp) {
 
 
 
-void HeatSim::applyEnvironmentalCooling(int x, int y, float deltaTime) {
-    Cell& cell = grid->getCell(x, y);
-    const Element& props = ElementTypes::getElement(cell.elementType);
-    
-    // ONI-STYLE: THERMAL MASS affects cooling rate
-    // High mass = takes longer to cool/warm
-    float thermalMass = cell.mass * props.specificHeatCapacity;
-    
-    // Trend toward ambient temperature
-    // Cooling rate inversely proportional to thermal mass
-    // TIME-SCALED: Multiply by deltaTime for frame-rate independence
-    float coolingRate = 0.05f / (thermalMass * 0.001f) * deltaTime;  // Normalize
-    float envEffect = (ambientTemp - cell.temperature) * coolingRate;
-    
-    // Gases cool faster (low thermal mass)
-    if (props.isGas) {
-        envEffect *= 2.0f;
-    }
-    
-    cell.temperature += envEffect;
-    
-    // Prevent below absolute zero
-    if (cell.temperature < -273.15f) {
-        cell.temperature = -273.15f;
-    }
-}
 
 void HeatSim::checkPhaseChangeTriggers(int x, int y) {
     Cell& cell = grid->getCell(x, y);

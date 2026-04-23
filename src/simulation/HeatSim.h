@@ -18,10 +18,9 @@ public:
     float getAmbientTemperature() const { return ambientTemp; }
     
 private:
-    float ambientTemp;  // Environmental temperature
+    float ambientTemp;  // Environmental temperature (kept for future use if needed)
     
     // Internal heat transfer functions
-    void applyEnvironmentalCooling(int x, int y, float deltaTime);
     void checkPhaseChangeTriggers(int x, int y);
     void startPhaseTransition(Cell& cell, ElementType targetType, float transitionSpeed);
 };

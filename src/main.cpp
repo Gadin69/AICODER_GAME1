@@ -508,12 +508,6 @@ void updateSimulation(float deltaTime) {
 }
 
 void renderDemo() {
-    static int frameCount = 0;
-    if (frameCount % 60 == 0) {  // Print once per second at 60fps
-        std::cout << "[RENDER] renderDemo called, frame: " << frameCount << std::endl;
-    }
-    frameCount++;
-    
     renderer.beginFrame();
     
     // Render all tiles from tileMap
@@ -669,10 +663,7 @@ int main() {
                 // Main menu
                 MenuAction action = mainMenu.handleEvent(event);
                 
-                std::cout << "[MENU] Action: " << static_cast<int>(action) << std::endl;
-                
                 if (action == MenuAction::Play) {
-                    std::cout << "[MENU] Play clicked! simulationInitialized: " << simulationInitialized << std::endl;
                     gameState = GameState::Playing;
                     if (!simulationInitialized) {
                         initializeDemo();
