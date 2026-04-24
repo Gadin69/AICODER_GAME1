@@ -360,117 +360,133 @@ bool GasSim::update(float deltaTime) {
                 
                 float cellMass = cell.mass;
                 
-                // Allow very small gas cells to float and merge
-                // Lower threshold for flow than for cell existence
-                // This prevents tiny gas pockets from getting stuck
-                static constexpr float FLOW_MIN_MASS = 0.0001f;  // 0.1g threshold for flow
-                if (cellMass < FLOW_MIN_MASS) {
-                    continue;
-                }
+                // No minimum mass threshold - let cells fix themselves through natural simulation
                 
-                // DEBUG: Log flow attempts for spawned gas (COMMENTED OUT - too spammy)
-                /*
-                static int flowDebugCount = 0;
-                bool isSpawnedFlow = (cellMass >= 0.01f && cellMass <= 0.5f);  // Recently spawned gas
-                if (isSpawnedFlow && flowDebugCount < 10) {
-                    std::cout << "[FLOW] Cell(" << x << "," << y << ") mass=" << cellMass << " checking directions..." << std::endl;
-                    flowDebugCount++;
-                }
-                */
+                // Define upward directions: UP, UP-LEFT, UP-RIGHT
+                int upDirections[3][2] = {{0, -1}, {-1, -1}, {1, -1}};
+                int upDirCount = 3;
                 
-                // GAS FLOW: Prioritize UPWARD movement, expand sideways only if blocked
-                
-                // Define directions with priority: UP, UP-DIAGONALS, SIDEWAYS, DOWN
-                int directions[7][2];
-                int dirCount = 0;
-                
-                // UP first (buoyancy - highest priority)
-                directions[dirCount][0] = 0; directions[dirCount][1] = -1; dirCount++;
-                
-                // UP-DIAGONAL (randomize)
-                if (simpleRand() % 2 == 0) {
-                    directions[dirCount][0] = -1; directions[dirCount][1] = -1; dirCount++;
-                    directions[dirCount][0] = 1; directions[dirCount][1] = -1; dirCount++;
-                } else {
-                    directions[dirCount][0] = 1; directions[dirCount][1] = -1; dirCount++;
-                    directions[dirCount][0] = -1; directions[dirCount][1] = -1; dirCount++;
-                }
-                
-                // SIDEWAYS (randomize)
-                if (simpleRand() % 2 == 0) {
-                    directions[dirCount][0] = -1; directions[dirCount][1] = 0; dirCount++;
-                    directions[dirCount][0] = 1; directions[dirCount][1] = 0; dirCount++;
-                } else {
-                    directions[dirCount][0] = 1; directions[dirCount][1] = 0; dirCount++;
-                    directions[dirCount][0] = -1; directions[dirCount][1] = 0; dirCount++;
-                }
-                
-                // DOWN last (lowest priority - gas only flows down if pushed)
-                directions[dirCount][0] = 0; directions[dirCount][1] = 1; dirCount++;
-                
-                // Scan for upward vacuum first (float upward)
-                int upVacuumDir = -1;
-                for (int i = 0; i < 3; i++) {  // Only check UP directions (0, 1, 2)
-                    int nx = x + directions[i][0];
-                    int ny = y + directions[i][1];
+                // ============ STEP 1: MOVE upward - SWAP into vacuum ============
+                bool movedUpward = false;
+                for (int i = 0; i < upDirCount; i++) {
+                    int nx = x + upDirections[i][0];
+                    int ny = y + upDirections[i][1];
                     
                     if (!grid->isValidPosition(nx, ny)) continue;
                     
                     Cell& neighbor = grid->getCell(nx, ny);
                     if (neighbor.elementType == ElementType::Vacuum) {
-                        upVacuumDir = i;
-                        break;
+                        FlowAction action;
+                        action.fromX = x; action.fromY = y;
+                        action.toX = nx; action.toY = ny;
+                        action.massToMove = cellMass;
+                        action.temperature = cell.temperature;
+                        action.type = cell.elementType;
+                        action.isMerge = false;  // SWAP
+                        flowActions.push_back(action);
+                        movedUpward = true;
+                        break;  // Done with this cell
                     }
                 }
                 
-                // If upward vacuum found, SWAP (float upward)
-                if (upVacuumDir != -1) {
-                    int nx = x + directions[upVacuumDir][0];
-                    int ny = y + directions[upVacuumDir][1];
-                    
-                    FlowAction action;
-                    action.fromX = x; action.fromY = y;
-                    action.toX = nx; action.toY = ny;
-                    action.massToMove = cellMass;
-                    action.temperature = cell.temperature;
-                    action.type = cell.elementType;
-                    action.isMerge = false;  // SWAP action
-                    flowActions.push_back(action);
-                    continue;  // Done with this cell
+                if (movedUpward) continue;
+                
+                // ============ STEP 2: Wait 4 ticks before merging ============
+                // Simulate settling time with randomness (20% chance to merge each tick)
+                // This gives gas ~4 ticks on average to flow naturally before merging
+                static unsigned int settleRandomSeed = 99999;
+                settleRandomSeed = settleRandomSeed * static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()) + 12345;
+                int settleRoll = (settleRandomSeed / 65536) % 100;
+                bool shouldMerge = (settleRoll < 20);  // 20% chance = ~4 tick average
+                
+                if (!shouldMerge) {
+                    // Not settling yet, skip merging this tick
+                    continue;
                 }
                 
-                // UPWARD BLOCKED: Try to merge upward into same gas
-                int upMergeDir = -1;
-                for (int i = 0; i < 3; i++) {  // Only check UP directions
-                    int nx = x + directions[i][0];
-                    int ny = y + directions[i][1];
+                // ============ STEP 3: MERGE upward ============
+                // Transfer mass to same gas above until above gas is at max
+                bool mergedUpward = false;
+                for (int i = 0; i < upDirCount; i++) {
+                    int nx = x + upDirections[i][0];
+                    int ny = y + upDirections[i][1];
                     
                     if (!grid->isValidPosition(nx, ny)) continue;
                     
                     Cell& neighbor = grid->getCell(nx, ny);
-                    bool isSameGas = isGasType(neighbor.elementType) && neighbor.elementType == cell.elementType;
                     
-                    if (isSameGas && upMergeDir == -1) {
-                        upMergeDir = i;
-                        break;
+                    // Can only merge into same gas type
+                    if (!isGasType(neighbor.elementType) || neighbor.elementType != cell.elementType) {
+                        continue;
+                    }
+                    
+                    // Merge if neighbor has space
+                    if (neighbor.mass < MAX_GAS_MASS) {
+                        // RESERVE PARTNER FIRST
+                        if (isMergeSource[y][x] || isMergeTarget[y][x] || 
+                            isMergeSource[ny][nx] || isMergeTarget[ny][nx]) {
+                            continue;
+                        }
+                        
+                        // Transfer enough to fill target or empty source
+                        float spaceAvailable = MAX_GAS_MASS - neighbor.mass;
+                        float transferAmount = std::min(cellMass, spaceAvailable);
+                        
+                        
+
+                        if (transferAmount > 0) {
+                            // RESERVE IMMEDIATELY
+                            isMergeSource[y][x] = true;
+                            isMergeTarget[ny][nx] = true;
+                            
+                            FlowAction action;
+                            action.fromX = x; action.fromY = y;
+                            action.toX = nx; action.toY = ny;
+                            action.massToMove = transferAmount;
+                            action.temperature = cell.temperature;
+                            action.type = cell.elementType;
+                            action.isMerge = true;
+                            flowActions.push_back(action);
+                            
+                            mergedUpward = true;
+                            break;  // Done with this cell
+                        }
                     }
                 }
                 
-                // If upward merge possible, do it
-                if (upMergeDir != -1) {
-                    int nx = x + directions[upMergeDir][0];
-                    int ny = y + directions[upMergeDir][1];
+                if (mergedUpward) continue;
+                
+                // ============ STEP 4: MERGE sideways (low→high mass) ============
+                int sideDirections[2][2] = {{-1, 0}, {1, 0}};
+                bool mergedSideways = false;
+                
+                for (int i = 0; i < 2; i++) {
+                    int nx = x + sideDirections[i][0];
+                    int ny = y + sideDirections[i][1];
+                    
+                    if (!grid->isValidPosition(nx, ny)) continue;
+                    
                     Cell& neighbor = grid->getCell(nx, ny);
                     
-                    // Check if already involved in merge
-                    if (!isMergeSource[y][x] && !isMergeTarget[y][x] && 
-                        !isMergeSource[ny][nx] && !isMergeTarget[ny][nx]) {
-                        
-                        float spaceAvailable = MAX_GAS_MASS - neighbor.mass;
-                        if (spaceAvailable >= 0.001f) {
+                    // Only merge with same gas type
+                    if (!isGasType(neighbor.elementType) || neighbor.elementType != cell.elementType) {
+                        continue;
+                    }
+                    
+                    // Low-to-high merge: only if neighbor has MORE mass
+                    if (neighbor.mass > cellMass && neighbor.mass < MAX_GAS_MASS) {
+                        // RESERVE PARTNER
+                        if (!isMergeSource[y][x] && !isMergeTarget[y][x] && 
+                            !isMergeSource[ny][nx] && !isMergeTarget[ny][nx]) {
+                            
+                            float spaceAvailable = MAX_GAS_MASS - neighbor.mass;
                             float transferAmount = std::min(cellMass, spaceAvailable);
                             
-                            if (transferAmount >= 0.0001f) {
+                            if (transferAmount > 0) {
+                                // RESERVE IMMEDIATELY
+                                isMergeSource[y][x] = true;
+                                isMergeTarget[ny][nx] = true;
+                                
                                 FlowAction action;
                                 action.fromX = x; action.fromY = y;
                                 action.toX = nx; action.toY = ny;
@@ -480,48 +496,66 @@ bool GasSim::update(float deltaTime) {
                                 action.isMerge = true;
                                 flowActions.push_back(action);
                                 
-                                isMergeSource[y][x] = true;
-                                isMergeTarget[ny][nx] = true;
-                                continue;  // Done with this cell
+                                mergedSideways = true;
+                                break;  // Done with this cell
                             }
                         }
                     }
                 }
                 
-                // UPWARD COMPLETELY BLOCKED: Expand sideways into vacuum (spread mass, not swap)
-                int sideVacuumDir = -1;
-                for (int i = 3; i < 5; i++) {  // Check SIDEWAY directions (3, 4)
-                    int nx = x + directions[i][0];
-                    int ny = y + directions[i][1];
-                    
-                    if (!grid->isValidPosition(nx, ny)) continue;
-                    
-                    Cell& neighbor = grid->getCell(nx, ny);
-                    if (neighbor.elementType == ElementType::Vacuum) {
-                        sideVacuumDir = i;
-                        break;
+                if (mergedSideways) continue;
+                
+                // ============ STEP 5: MOVE sideways - SWAP into vacuum ============
+                // Only if blocked on both sides (can't merge)
+                bool blockedLeft = false;
+                bool blockedRight = false;
+                
+                if (grid->isValidPosition(x - 1, y)) {
+                    Cell& leftNeighbor = grid->getCell(x - 1, y);
+                    if (leftNeighbor.elementType != ElementType::Vacuum) {
+                        blockedLeft = true;
                     }
+                } else {
+                    blockedLeft = true;  // Edge of grid
                 }
                 
-                // If sideways vacuum found, SPREAD mass (partial transfer, not full swap)
-                if (sideVacuumDir != -1) {
-                    int nx = x + directions[sideVacuumDir][0];
-                    int ny = y + directions[sideVacuumDir][1];
-                    
-                    // Spread 50% of mass sideways (expansion, not movement)
-                    float spreadAmount = cellMass * 0.5f;
-                    
-                    if (spreadAmount > 0.0001f) {
-                        FlowAction action;
-                        action.fromX = x; action.fromY = y;
-                        action.toX = nx; action.toY = ny;
-                        action.massToMove = spreadAmount;
-                        action.temperature = cell.temperature;
-                        action.type = cell.elementType;
-                        action.isMerge = true;  // Treat as merge (partial transfer)
-                        flowActions.push_back(action);
+                if (grid->isValidPosition(x + 1, y)) {
+                    Cell& rightNeighbor = grid->getCell(x + 1, y);
+                    if (rightNeighbor.elementType != ElementType::Vacuum) {
+                        blockedRight = true;
                     }
+                } else {
+                    blockedRight = true;  // Edge of grid
                 }
+                
+                // If blocked on BOTH sides, can't swap sideways
+                if (blockedLeft && blockedRight) {
+                    // Do nothing this tick
+                    continue;
+                }
+                
+                // Can swap sideways into vacuum
+                int chosenDir = -1;
+                if (!blockedLeft && !blockedRight) {
+                    // Both sides open - random choice
+                    chosenDir = (simpleRand() % 2 == 0) ? 0 : 1;
+                } else if (!blockedLeft) {
+                    chosenDir = 0;  // Left
+                } else {
+                    chosenDir = 1;  // Right
+                }
+                
+                int nx = x + sideDirections[chosenDir][0];
+                int ny = y + sideDirections[chosenDir][1];
+                
+                FlowAction action;
+                action.fromX = x; action.fromY = y;
+                action.toX = nx; action.toY = ny;
+                action.massToMove = cellMass;
+                action.temperature = cell.temperature;
+                action.type = cell.elementType;
+                action.isMerge = false;  // SWAP
+                flowActions.push_back(action);
             }
         }
         
@@ -556,9 +590,22 @@ bool GasSim::update(float deltaTime) {
                 calculatePressure(action.toX, action.toY);
                 
                 // Handle leftover in source cell
-                fromCell.mass = leftover;
-                fromCell.updated = true;
-                fromCell.updateColor();
+                if (leftover < 0.00001f) {
+                    // Cell is EMPTY - convert to vacuum with proper cleared data
+                    fromCell.elementType = ElementType::Vacuum;
+                    fromCell.mass = 0.0f;
+                    fromCell.temperature = -273.15f;  // Absolute zero
+                    fromCell.pressure = 0.0f;
+                    fromCell.velocityX = 0.0f;
+                    fromCell.velocityY = 0.0f;
+                    fromCell.color = sf::Color::Black;
+                    fromCell.updated = true;
+                } else {
+                    // Cell still has mass - keep as gas
+                    fromCell.mass = leftover;
+                    fromCell.updated = true;
+                    fromCell.updateColor();
+                }
                 calculatePressure(action.fromX, action.fromY);
             } else {
                 // SWAP: Exchange ALL cell data
@@ -593,13 +640,13 @@ bool GasSim::update(float deltaTime) {
             }
         }
     }
-    
+    /*
     // Gas decay: time-based removal of microscopic gas cells
     // CRITICAL FIX: Only decay isolated micro-cells, not active gas clouds
+    
     static constexpr float MICRO_MASS_THRESHOLD = 0.001f;
     static constexpr float MIN_DECAY_TIME = 60.0f;   // Minimum 60 seconds
     static constexpr float MAX_DECAY_TIME = 120.0f;  // Maximum 120 seconds
-    
     // Random seed for decay time generation
     static unsigned int decayRandomSeed = 12345;
     
@@ -672,6 +719,8 @@ bool GasSim::update(float deltaTime) {
             }
         }
     }
+    */
+    // Decay section commented out above
     
     // MASS AUDIT: Track total mass across ALL phases to detect conservation issues
     static int auditTickCounter = 0;

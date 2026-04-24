@@ -312,10 +312,14 @@ void placeCellAtMouse(sf::Mouse::Button button) {
     // Get mouse position in screen coordinates
     sf::Vector2i mousePos = sf::Mouse::getPosition(renderer.getRenderWindow());
     
+    // Get current window size
+    sf::Vector2u windowSize = renderer.getRenderWindow().getSize();
+    
     // Convert screen coordinates to world coordinates using camera
     sf::Vector2f worldPos = renderer.getCamera().screenToWorld(
         static_cast<float>(mousePos.x), 
-        static_cast<float>(mousePos.y)
+        static_cast<float>(mousePos.y),
+        windowSize
     );
     
     // Convert world coordinates to tile coordinates (32px tiles)
@@ -499,8 +503,11 @@ void updateElementInspector() {
     // Get mouse position in SCREEN coordinates
     sf::Vector2i mousePos = sf::Mouse::getPosition(renderer.getRenderWindow());
     
+    // Get current window size
+    sf::Vector2u windowSize = renderer.getRenderWindow().getSize();
+    
     // Convert to WORLD coordinates using camera
-    sf::Vector2f worldPos = renderer.getCamera().screenToWorld((float)mousePos.x, (float)mousePos.y);
+    sf::Vector2f worldPos = renderer.getCamera().screenToWorld((float)mousePos.x, (float)mousePos.y, windowSize);
     
     // Convert world coordinates to tile coordinates (32px tiles)
     int tileX = (int)(worldPos.x / 32.0f);

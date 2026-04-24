@@ -18,7 +18,7 @@ public:
     sf::View getView() const;
     void applyTo(sf::RenderWindow& window);
 
-    sf::Vector2f screenToWorld(float screenX, float screenY) const;
+    sf::Vector2f screenToWorld(float screenX, float screenY, const sf::Vector2u& windowSize) const;
     sf::Vector2f worldToScreen(float worldX, float worldY, const sf::Vector2u& windowSize) const;
     
     // Smooth scrolling
