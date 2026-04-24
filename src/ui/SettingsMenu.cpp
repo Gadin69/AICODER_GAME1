@@ -416,7 +416,9 @@ MenuAction SettingsMenu::handleEvent(const sf::Event& event) {
         }
         
         // Handle bottom buttons
+        applyButton.handleMousePress(mousePosVec);
         backButton.handleMousePress(mousePosVec);
+        resetButton.handleMousePress(mousePosVec);
     } else if (event.is<sf::Event::MouseButtonReleased>()) {
         // Handle slider releases
         cameraSpeedSlider.handleMouseRelease();
@@ -424,6 +426,7 @@ MenuAction SettingsMenu::handleEvent(const sf::Event& event) {
         cameraMaxSpeedSlider.handleMouseRelease();
         
         // Release triggers callbacks for buttons
+        applyButton.handleMouseRelease();
         controlsTab.handleMouseRelease();
         graphicsTab.handleMouseRelease();
         audioTab.handleMouseRelease();
@@ -460,6 +463,7 @@ MenuAction SettingsMenu::handleEvent(const sf::Event& event) {
                     break;
             }
             
+            applyButton.handleMouseMove(pos);
             backButton.handleMouseMove(pos);
             resetButton.handleMouseMove(pos);
         }
