@@ -132,6 +132,13 @@ bool UIBorder::containsPoint(const sf::Vector2f& point) const {
            point.y >= pos.y && point.y <= pos.y + size.y;
 }
 
+void UIBorder::clearChildren() {
+    uiElementChildren.clear();
+    primitiveChildren.clear();
+    // Note: Does NOT delete the SFML objects, just removes from border
+    // The UI components own their SFML objects
+}
+
 void UIBorder::updateChildPositions() {
     if (!initialized) return;
     

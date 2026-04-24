@@ -32,6 +32,7 @@ public:
     sf::Vector2f getPosition() const;
     sf::Vector2f getSize() const;
     bool containsPoint(const sf::Vector2f& point) const;  // Hit testing
+    void clearChildren();  // Remove all children (for dynamic content switching)
     
     bool initialized = false;
     

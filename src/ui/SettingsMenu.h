@@ -31,27 +31,47 @@ public:
 private:
     void buildMenu();
     
+    // New layout methods
+    void buildTitle();
+    void buildSidebar();
+    void buildContent();
+    void buildButtons();
+    void switchCategory(int category);
+    void updateTabColors();
+    
     sf::Font font;
     sf::RenderWindow* window = nullptr;
     
-    // UI Components
-    UIBorder displayBorder;  // Display mode + resolution dropdowns
+    // Layout borders
+    UIBorder mainBorder;        // Entire settings window container
+    UIBorder titleBorder;       // Top title area
+    UIBorder sidebarBorder;     // Left category tabs
+    UIBorder contentBorder;     // Right settings content
+    UIBorder buttonBorder;      // Bottom buttons
+    
+    // Category tabs
+    UIButton controlsTab;
+    UIButton graphicsTab;
+    UIButton audioTab;
+    UIButton videoTab;
+    UIButton gameplayTab;
+    int activeCategory = 1;  // 0=Controls, 1=Graphics (default), 2=Audio, 3=Video, 4=Gameplay
+    
+    // Existing UI Components (reused in new layout)
     UIDropdown displayDropdown;
     UIDropdown resolutionDropdown;
     
-    UIBorder gridBorder;  // Grid size inputs
     UIToggle vsyncToggle;
     UINumberInput gridWidthInput;
     UINumberInput gridHeightInput;
     
-    UIBorder cameraBorder;  // Camera control sliders
     UISlider cameraSpeedSlider;
     UISlider cameraAccelSlider;
     UISlider cameraMaxSpeedSlider;
     
-    UIBorder actionBorder;  // Apply/Back buttons
-    UIButton applyButton;
+    // Bottom buttons
     UIButton backButton;
+    UIButton resetButton;
     
     bool initialized = false;
     MenuAction lastAction = MenuAction::None;
@@ -66,4 +86,10 @@ private:
     sf::Vector2f mousePos;
     sf::Vector2u lastWindowSize;  // Track window size to detect changes
     bool cameraSettingsChanged = false;
+    
+    // Cached dimensions for layout
+    float windowWidth = 0.0f;
+    float windowHeight = 0.0f;
+    float titleHeight = 0.0f;
+    float buttonHeight = 0.0f;
 };
