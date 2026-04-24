@@ -375,10 +375,9 @@ bool GasSim::update(float deltaTime) {
                 }
                 */
                 
-                // GAS FLOW: Scan ALL directions, prioritize VACUUM over merge
-                // This prevents gas from merging when it could flow into empty space
+                // GAS FLOW: Prioritize UPWARD movement, expand sideways only if blocked
                 
-                // Define 7 directions: UP, UP-DIAGONALS, SIDEWAYS, DOWN (randomized)
+                // Define directions with priority: UP, UP-DIAGONALS, SIDEWAYS, DOWN
                 int directions[7][2];
                 int dirCount = 0;
                 
@@ -406,98 +405,119 @@ bool GasSim::update(float deltaTime) {
                 // DOWN last (lowest priority - gas only flows down if pushed)
                 directions[dirCount][0] = 0; directions[dirCount][1] = 1; dirCount++;
                 
-                // First pass: Look for vacuum in any direction
-                int vacuumDir = -1;
-                int mergeDir = -1;
-                
-                for (int i = 0; i < dirCount; i++) {
+                // Scan for upward vacuum first (float upward)
+                int upVacuumDir = -1;
+                for (int i = 0; i < 3; i++) {  // Only check UP directions (0, 1, 2)
                     int nx = x + directions[i][0];
                     int ny = y + directions[i][1];
                     
                     if (!grid->isValidPosition(nx, ny)) continue;
                     
                     Cell& neighbor = grid->getCell(nx, ny);
-                    ElementType neighborType = neighbor.elementType;
-                    
-                    bool isVacuum = (neighborType == ElementType::Vacuum);
-                    bool isSameGas = isGasType(neighborType) && neighborType == cell.elementType;
-                    
-                    if (isVacuum && vacuumDir == -1) {
-                        vacuumDir = i;  // Found vacuum, remember it
-                    }
-                    else if (isSameGas && mergeDir == -1) {
-                        mergeDir = i;  // Found same gas, remember as backup
+                    if (neighbor.elementType == ElementType::Vacuum) {
+                        upVacuumDir = i;
+                        break;
                     }
                 }
                 
-                // PRIORITY: Vacuum > Merge
-                int chosenDir = (vacuumDir != -1) ? vacuumDir : mergeDir;
-                
-                if (chosenDir == -1) continue;  // No valid moves
-                
-                // Execute the chosen action
-                int nx = x + directions[chosenDir][0];
-                int ny = y + directions[chosenDir][1];
-                Cell& neighbor = grid->getCell(nx, ny);
-                ElementType neighborType = neighbor.elementType;
-                
-                bool isVacuum = (neighborType == ElementType::Vacuum);
-                bool isSameGas = isGasType(neighborType) && neighborType == cell.elementType;
-                
-                FlowAction action;
-                action.fromX = x; action.fromY = y;
-                action.toX = nx; action.toY = ny;
-                action.massToMove = cellMass;
-                action.temperature = cell.temperature;
-                action.type = cell.elementType;
-                action.isMerge = false;
-                
-                if (isVacuum) {
-                    // VACUUM: Swap (gas moves into vacuum)
-                    action.isMerge = false;
+                // If upward vacuum found, SWAP (float upward)
+                if (upVacuumDir != -1) {
+                    int nx = x + directions[upVacuumDir][0];
+                    int ny = y + directions[upVacuumDir][1];
+                    
+                    FlowAction action;
+                    action.fromX = x; action.fromY = y;
+                    action.toX = nx; action.toY = ny;
+                    action.massToMove = cellMass;
+                    action.temperature = cell.temperature;
+                    action.type = cell.elementType;
+                    action.isMerge = false;  // SWAP action
                     flowActions.push_back(action);
+                    continue;  // Done with this cell
                 }
-                else if (isSameGas) {
-                        // SAME GAS: Only merge UPWARD (transfer from lower cell to upper cell)
-                        // This makes gas collect at the top (ceiling) naturally
-                        // ny < y means neighbor is ABOVE current cell (smaller y = higher on screen)
+                
+                // UPWARD BLOCKED: Try to merge upward into same gas
+                int upMergeDir = -1;
+                for (int i = 0; i < 3; i++) {  // Only check UP directions
+                    int nx = x + directions[i][0];
+                    int ny = y + directions[i][1];
+                    
+                    if (!grid->isValidPosition(nx, ny)) continue;
+                    
+                    Cell& neighbor = grid->getCell(nx, ny);
+                    bool isSameGas = isGasType(neighbor.elementType) && neighbor.elementType == cell.elementType;
+                    
+                    if (isSameGas && upMergeDir == -1) {
+                        upMergeDir = i;
+                        break;
+                    }
+                }
+                
+                // If upward merge possible, do it
+                if (upMergeDir != -1) {
+                    int nx = x + directions[upMergeDir][0];
+                    int ny = y + directions[upMergeDir][1];
+                    Cell& neighbor = grid->getCell(nx, ny);
+                    
+                    // Check if already involved in merge
+                    if (!isMergeSource[y][x] && !isMergeTarget[y][x] && 
+                        !isMergeSource[ny][nx] && !isMergeTarget[ny][nx]) {
                         
-                        // Skip if neighbor is below or at same level (only merge upward)
-                        if (ny >= y) {
-                            continue;
-                        }
-                        
-                        // Skip if this cell or neighbor is already involved in a merge
-                        if (isMergeSource[y][x] || isMergeTarget[y][x] || 
-                            isMergeSource[ny][nx] || isMergeTarget[ny][nx]) {
-                            continue;
-                        }
-                        
-                        // Transfer mass from current (lower) to neighbor (upper)
-                        // No mass comparison needed - always push upward to collect at ceiling
                         float spaceAvailable = MAX_GAS_MASS - neighbor.mass;
-                        
-                        if (spaceAvailable < 0.001f) {
-                            // Neighbor is full, try next direction
-                            continue;
+                        if (spaceAvailable >= 0.001f) {
+                            float transferAmount = std::min(cellMass, spaceAvailable);
+                            
+                            if (transferAmount >= 0.0001f) {
+                                FlowAction action;
+                                action.fromX = x; action.fromY = y;
+                                action.toX = nx; action.toY = ny;
+                                action.massToMove = transferAmount;
+                                action.temperature = cell.temperature;
+                                action.type = cell.elementType;
+                                action.isMerge = true;
+                                flowActions.push_back(action);
+                                
+                                isMergeSource[y][x] = true;
+                                isMergeTarget[ny][nx] = true;
+                                continue;  // Done with this cell
+                            }
                         }
-                        
-                        // Calculate how much mass to transfer
-                        float transferAmount = std::min(cellMass, spaceAvailable);
-                        
-                        if (transferAmount < 0.0001f) {
-                            // Too tiny to bother, try next direction
-                            continue;
-                        }
-                        
-                        // MERGE: Transfer mass upward to collect at top
-                        action.massToMove = transferAmount;
-                        action.isMerge = true;
+                    }
+                }
+                
+                // UPWARD COMPLETELY BLOCKED: Expand sideways into vacuum (spread mass, not swap)
+                int sideVacuumDir = -1;
+                for (int i = 3; i < 5; i++) {  // Check SIDEWAY directions (3, 4)
+                    int nx = x + directions[i][0];
+                    int ny = y + directions[i][1];
+                    
+                    if (!grid->isValidPosition(nx, ny)) continue;
+                    
+                    Cell& neighbor = grid->getCell(nx, ny);
+                    if (neighbor.elementType == ElementType::Vacuum) {
+                        sideVacuumDir = i;
+                        break;
+                    }
+                }
+                
+                // If sideways vacuum found, SPREAD mass (partial transfer, not full swap)
+                if (sideVacuumDir != -1) {
+                    int nx = x + directions[sideVacuumDir][0];
+                    int ny = y + directions[sideVacuumDir][1];
+                    
+                    // Spread 50% of mass sideways (expansion, not movement)
+                    float spreadAmount = cellMass * 0.5f;
+                    
+                    if (spreadAmount > 0.0001f) {
+                        FlowAction action;
+                        action.fromX = x; action.fromY = y;
+                        action.toX = nx; action.toY = ny;
+                        action.massToMove = spreadAmount;
+                        action.temperature = cell.temperature;
+                        action.type = cell.elementType;
+                        action.isMerge = true;  // Treat as merge (partial transfer)
                         flowActions.push_back(action);
-                        
-                        // Mark both cells as involved in merge to prevent conflicts
-                        isMergeSource[y][x] = true;
-                        isMergeTarget[ny][nx] = true;
+                    }
                 }
             }
         }
