@@ -353,15 +353,18 @@ bool GasSim::update(float deltaTime) {
                 Cell& cell = grid->getCell(x, y);
                 if (!isGasType(cell.elementType)) continue;
                 
-                // LOD CHECK: Skip flow for far-away cells (spreading already happened)
-                if (!shouldUpdateCell(x, y, deltaTime)) continue;
+                // GAS MUST ALWAYS FLOAT - remove LOD check for gas flow
+                // Gas buoyancy is critical for realistic behavior
+                // LOD was causing gas to hang mid-air when far from camera
+                // if (!shouldUpdateCell(x, y, deltaTime)) continue;  // REMOVED
                 
                 float cellMass = cell.mass;
                 
-                // PERFORMANCE: Allow flow/merge even after spreading
-                // Gas cells need to float into vacuum and merge with same-type neighbors
-                // Only skip if cell just became empty
-                if (cellMass < MIN_GAS_MASS) {
+                // Allow very small gas cells to float and merge
+                // Lower threshold for flow than for cell existence
+                // This prevents tiny gas pockets from getting stuck
+                static constexpr float FLOW_MIN_MASS = 0.0001f;  // 0.1g threshold for flow
+                if (cellMass < FLOW_MIN_MASS) {
                     continue;
                 }
                 
