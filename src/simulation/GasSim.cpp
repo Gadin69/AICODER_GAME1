@@ -534,26 +534,9 @@ bool GasSim::update(float deltaTime) {
                 
                 // Handle leftover in source cell
                 fromCell.mass = leftover;
-                
-                // If source cell is now below threshold, convert to vacuum
-                if (leftover < 0.000001f) {
-                    fromCell.elementType = ElementType::Vacuum;
-                    fromCell.mass = 0.0f;
-                    fromCell.pressure = 0.0f;
-                    fromCell.temperature = -273.15f;
-                    fromCell.velocityX = 0.0f;
-                    fromCell.velocityY = 0.0f;
-                    fromCell.updated = false;
-                    fromCell.targetElementType = ElementType::Empty;
-                    fromCell.phaseTransitionProgress = 0.0f;
-                    fromCell.phaseTransitionSpeed = 0.0f;
-                    fromCell.microMassDecayTime = 0.0f;
-                    fromCell.color = sf::Color(10, 10, 15);
-                } else {
-                    fromCell.updated = true;
-                    fromCell.updateColor();
-                    calculatePressure(action.fromX, action.fromY);
-                }
+                fromCell.updated = true;
+                fromCell.updateColor();
+                calculatePressure(action.fromX, action.fromY);
             } else {
                 // SWAP: Exchange ALL cell data
                 ElementType tempType = fromCell.elementType;
