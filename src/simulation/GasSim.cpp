@@ -335,6 +335,10 @@ bool GasSim::update(float deltaTime) {
         std::vector<FlowAction> flowActions;
         flowActions.reserve(width * height / 4);  // Reserve space for efficiency
         
+        // Track which cells are already involved in merges to prevent conflicts
+        std::vector<std::vector<bool>> isMergeSource(height, std::vector<bool>(width, false));
+        std::vector<std::vector<bool>> isMergeTarget(height, std::vector<bool>(width, false));
+        
         // Random seed for direction choice
         static unsigned int flowRandomSeed = 42;
         auto simpleRand = []() -> int {
@@ -457,6 +461,12 @@ bool GasSim::update(float deltaTime) {
                         // SAME GAS: Always merge from LESS mass to MORE mass
                         // This reduces vacuum oscillations by absorbing small pockets into larger ones
                         
+                        // Skip if this cell or neighbor is already involved in a merge
+                        if (isMergeSource[y][x] || isMergeTarget[y][x] || 
+                            isMergeSource[ny][nx] || isMergeTarget[ny][nx]) {
+                            continue;
+                        }
+                        
                         // Only merge if current cell has LESS mass than neighbor
                         // (we want to transfer FROM less TO more)
                         if (cellMass >= neighbor.mass) {
@@ -484,6 +494,10 @@ bool GasSim::update(float deltaTime) {
                         action.massToMove = transferAmount;
                         action.isMerge = true;
                         flowActions.push_back(action);
+                        
+                        // Mark both cells as involved in merge to prevent conflicts
+                        isMergeSource[y][x] = true;
+                        isMergeTarget[ny][nx] = true;
                 }
             }
         }
