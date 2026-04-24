@@ -107,7 +107,17 @@ bool GasSim::update(float deltaTime) {
             
             float currentMass = gasSnapshot[y][x].mass;
             float currentPressure = gasSnapshot[y][x].pressure;
-            // ALL gas cells spread regardless of mass - no minimum threshold
+            
+            // PERFORMANCE OPTIMIZATION: Only expand (spread mass) if over max capacity
+            // Gas cells at or below max mass skip expensive spreading calculation
+            // They will still float and merge in STEP 4
+            if (currentMass > MAX_GAS_MASS) {
+                // OVER CAPACITY: Perform expansion/spreading to reduce mass
+                // Continue to STEP 2 spreading logic below
+            } else {
+                // AT OR BELOW MAX: Skip spreading, will float/merge in STEP 4
+                continue;
+            }
             
             // 4-directional neighbors (like heat transfer)
             int neighbors[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
@@ -344,17 +354,10 @@ bool GasSim::update(float deltaTime) {
                 
                 float cellMass = cell.mass;
                 
-                // Skip flow for cells that just spread - they already moved mass
-                // BUT: In narrow tubes, we need to allow flow even after spread
-                // to prevent mass from getting "stuck" in spreading pattern
-                if (massOut[y][x] > 0.0001f) {
-                    // DEBUG: Track cells that skip flow
-                    static int skipFlowCount = 0;
-                    if (cellMass > 10.0f && skipFlowCount < 5) {
-                        std::cout << "[FLOW SKIP] Cell(" << x << "," << y << ") mass=" << cellMass 
-                                  << " massOut=" << massOut[y][x] << " - skipping flow" << std::endl;
-                        skipFlowCount++;
-                    }
+                // PERFORMANCE: Allow flow/merge even after spreading
+                // Gas cells need to float into vacuum and merge with same-type neighbors
+                // Only skip if cell just became empty
+                if (cellMass < MIN_GAS_MASS) {
                     continue;
                 }
                 
@@ -451,24 +454,12 @@ bool GasSim::update(float deltaTime) {
                     flowActions.push_back(action);
                 }
                 else if (isSameGas) {
-                        // SAME GAS: Pressure-based merge decision
-                        float spaceAvailable = 1.250f - neighbor.mass;  // 1.250kg (~2.7 lbs) max per cell
+                        // SAME GAS: Always merge if there's space (performance optimization)
+                        // No pressure checking - just collect mass until cell is full
+                        float spaceAvailable = MAX_GAS_MASS - neighbor.mass;
                         
                         if (spaceAvailable < 0.001f) {
                             // Neighbor is full, try next direction
-                            continue;
-                        }
-                        
-                        // PRESSURE-BASED MERGE: Check if pressures are close enough to merge
-                        // If pressures are similar (within 3x ratio), merge to collect
-                        // If very different, let spreading handle equalization
-                        float pressureRatio = (neighbor.pressure > 0.001f) ? 
-                                            (cell.pressure / neighbor.pressure) : 1000.0f;
-                        
-                        bool shouldMerge = (pressureRatio >= 0.33f && pressureRatio <= 3.0f);
-                        
-                        if (!shouldMerge) {
-                            // Pressures too different - don't merge, try next direction
                             continue;
                         }
                         
@@ -504,7 +495,7 @@ bool GasSim::update(float deltaTime) {
             
             if (action.isMerge) {
                 // MERGE: Push mass into target, leftover stays
-                float spaceAvailable = 1.250f - toCell.mass;  // 1.250kg (~2.7 lbs) max
+                float spaceAvailable = MAX_GAS_MASS - toCell.mass;
                 float massToMerge = std::min(action.massToMove, spaceAvailable);
                 float leftover = action.massToMove - massToMerge;
                 
