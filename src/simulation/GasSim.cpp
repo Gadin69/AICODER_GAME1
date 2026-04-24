@@ -458,8 +458,14 @@ bool GasSim::update(float deltaTime) {
                     flowActions.push_back(action);
                 }
                 else if (isSameGas) {
-                        // SAME GAS: Always merge from LESS mass to MORE mass
-                        // This reduces vacuum oscillations by absorbing small pockets into larger ones
+                        // SAME GAS: Only merge UPWARD (transfer from lower cell to upper cell)
+                        // This makes gas collect at the top (ceiling) naturally
+                        // ny < y means neighbor is ABOVE current cell (smaller y = higher on screen)
+                        
+                        // Skip if neighbor is below or at same level (only merge upward)
+                        if (ny >= y) {
+                            continue;
+                        }
                         
                         // Skip if this cell or neighbor is already involved in a merge
                         if (isMergeSource[y][x] || isMergeTarget[y][x] || 
@@ -467,14 +473,8 @@ bool GasSim::update(float deltaTime) {
                             continue;
                         }
                         
-                        // Only merge if current cell has LESS mass than neighbor
-                        // (we want to transfer FROM less TO more)
-                        if (cellMass >= neighbor.mass) {
-                            // Current cell has equal or more mass - skip, let neighbor's scan handle it
-                            continue;
-                        }
-                        
-                        // Current cell has less mass - transfer to neighbor (the larger pocket)
+                        // Transfer mass from current (lower) to neighbor (upper)
+                        // No mass comparison needed - always push upward to collect at ceiling
                         float spaceAvailable = MAX_GAS_MASS - neighbor.mass;
                         
                         if (spaceAvailable < 0.001f) {
@@ -482,7 +482,7 @@ bool GasSim::update(float deltaTime) {
                             continue;
                         }
                         
-                        // Calculate how much mass to transfer (all of current cell or what fits)
+                        // Calculate how much mass to transfer
                         float transferAmount = std::min(cellMass, spaceAvailable);
                         
                         if (transferAmount < 0.0001f) {
@@ -490,7 +490,7 @@ bool GasSim::update(float deltaTime) {
                             continue;
                         }
                         
-                        // MERGE: Transfer mass from smaller cell to larger cell
+                        // MERGE: Transfer mass upward to collect at top
                         action.massToMove = transferAmount;
                         action.isMerge = true;
                         flowActions.push_back(action);
