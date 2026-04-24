@@ -1,6 +1,8 @@
 #pragma once
 
 #include "SimulationSystem.h"
+#include "ElementTypes.h"
+#include <vector>
 
 // Fluid simulation system - handles liquid physics
 // Responsible for: liquid flow, viscosity, density-based movement
@@ -25,4 +27,14 @@ private:
     
     bool isLiquidType(ElementType type);
     bool canDisplace(ElementType fluid, ElementType target);
+    bool hasGasEscapeRoute(int x, int y, ElementType gasType);
+    
+    // Gas displacement queue
+    struct DisplacedGas {
+        int x, y;
+        float mass;
+        float temperature;
+        ElementType type;
+    };
+    std::vector<DisplacedGas> displacedGasQueue;
 };
