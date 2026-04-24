@@ -454,8 +454,17 @@ bool GasSim::update(float deltaTime) {
                     flowActions.push_back(action);
                 }
                 else if (isSameGas) {
-                        // SAME GAS: Always merge if there's space (performance optimization)
-                        // No pressure checking - just collect mass until cell is full
+                        // SAME GAS: Always merge from LESS mass to MORE mass
+                        // This reduces vacuum oscillations by absorbing small pockets into larger ones
+                        
+                        // Only merge if current cell has LESS mass than neighbor
+                        // (we want to transfer FROM less TO more)
+                        if (cellMass >= neighbor.mass) {
+                            // Current cell has equal or more mass - skip, let neighbor's scan handle it
+                            continue;
+                        }
+                        
+                        // Current cell has less mass - transfer to neighbor (the larger pocket)
                         float spaceAvailable = MAX_GAS_MASS - neighbor.mass;
                         
                         if (spaceAvailable < 0.001f) {
@@ -463,7 +472,7 @@ bool GasSim::update(float deltaTime) {
                             continue;
                         }
                         
-                        // Calculate how much mass to transfer
+                        // Calculate how much mass to transfer (all of current cell or what fits)
                         float transferAmount = std::min(cellMass, spaceAvailable);
                         
                         if (transferAmount < 0.0001f) {
@@ -471,7 +480,7 @@ bool GasSim::update(float deltaTime) {
                             continue;
                         }
                         
-                        // MERGE: Transfer mass to neighbor
+                        // MERGE: Transfer mass from smaller cell to larger cell
                         action.massToMove = transferAmount;
                         action.isMerge = true;
                         flowActions.push_back(action);
