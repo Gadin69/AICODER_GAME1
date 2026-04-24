@@ -22,8 +22,10 @@ private:
     // Internal gas functions
     void calculatePressure(int x, int y);
     void mergeGasWithNeighbors(int x, int y);
+    void swapWithLighterLiquidAbove(int x, int y);
     void flowGasByPressure(int x, int y);
     void fillVacuumPreferentially(int x, int y);
+    void leakGasDiagonally(int x, int y, float deltaTime);
     
     bool isGasType(ElementType type);
     bool isSameGas(ElementType type1, ElementType type2);

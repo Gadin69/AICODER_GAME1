@@ -9,10 +9,13 @@ SimulationManager::SimulationManager() {
     fluidSim = std::make_unique<FluidSim>();
     gasSim = std::make_unique<GasSim>();
     
-    // Register systems
-    registerSystem(std::move(heatSim));
-    registerSystem(std::move(fluidSim));
+    // Register systems - ORDER MATTERS!
+    // GasSim first: Creates/destroys gas cells, sets their temperatures
+    // FluidSim second: Moves liquids around
+    // HeatSim last: Transfers heat between all cells (including newly created gas)
     registerSystem(std::move(gasSim));
+    registerSystem(std::move(fluidSim));
+    registerSystem(std::move(heatSim));
     
     // Multi-threading DISABLED by default - simulation systems share grid state
     // True parallel execution requires complete double-buffering isolation

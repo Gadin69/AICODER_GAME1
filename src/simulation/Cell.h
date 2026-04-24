@@ -21,7 +21,6 @@ struct Cell {
     float mass;            // kg - DYNAMIC mass (ONI-style: can be partial!)
     float temperature;
     float pressure;        // Pascals (for gas cells)
-    float gasMass;         // kg of gas in this cell (for accumulation)
     float velocityX;
     float velocityY;
     bool updated;
@@ -31,13 +30,15 @@ struct Cell {
     ElementType targetElementType = ElementType::Empty;  // What we're transitioning to
     float phaseTransitionProgress = 0.0f;  // 0.0 to 1.0 (0 = not started, 1 = complete)
     float phaseTransitionSpeed = 0.0f;  // How fast the transition happens per tick
+    
+    // Gas decay tracking
+    float microMassDecayTime = 0.0f;  // Time spent at microscopic mass (for gas dissipation)
 
     Cell()
         : elementType(ElementType::Vacuum)  // Default is vacuum, not empty
         , mass(0.0f)                        // No mass in vacuum
         , temperature(-273.15f)             // Absolute zero in vacuum
         , pressure(0.0f)                    // No pressure in vacuum
-        , gasMass(0.0f)
         , velocityX(0.0f)
         , velocityY(0.0f)
         , updated(false)
@@ -45,6 +46,7 @@ struct Cell {
         , targetElementType(ElementType::Empty)
         , phaseTransitionProgress(0.0f)
         , phaseTransitionSpeed(0.0f)
+        , microMassDecayTime(0.0f)
     {
     }
 
@@ -59,8 +61,17 @@ struct Cell {
             case ElementType::Solid:
                 color = sf::Color(128, 128, 128);
                 break;
+            case ElementType::Solid_Ice:
+                color = sf::Color(200, 230, 255, 200);  // Light blue-white ice
+                break;
+            case ElementType::Solid_DryIce:
+                color = sf::Color(240, 240, 255, 220);  // White/light blue dry ice
+                break;
             case ElementType::Gas_O2:
                 color = sf::Color(100, 150, 255, 100);
+                break;
+            case ElementType::Gas_Lava:
+                color = sf::Color(255, 200, 50, 80);    // Bright orange-yellow gas
                 break;
             case ElementType::Gas_CO2:
                 color = sf::Color(100, 100, 100, 120);
@@ -73,6 +84,9 @@ struct Cell {
                 break;
             case ElementType::ContaminatedWater:
                 color = sf::Color(100, 150, 100, 180);
+                break;
+            case ElementType::Solid_ContaminatedWater:
+                color = sf::Color(150, 180, 150, 200);  // Murky frozen green-gray
                 break;
             default:
                 color = sf::Color::Transparent;

@@ -21,6 +21,6 @@ private:
     float ambientTemp;  // Environmental temperature (kept for future use if needed)
     
     // Internal heat transfer functions
-    void checkPhaseChangeTriggers(int x, int y);
+    void checkPhaseChangeTriggers(int x, int y, float deltaTime);
     void startPhaseTransition(Cell& cell, ElementType targetType, float transitionSpeed);
 };

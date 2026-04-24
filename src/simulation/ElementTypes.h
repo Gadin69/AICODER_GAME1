@@ -6,11 +6,15 @@ enum class ElementType {
     Empty,
     Vacuum,  // Perfect void - no heat transfer
     Solid,  // Rock/Stone
+    Solid_Ice,  // Frozen water
+    Solid_DryIce,  // Frozen CO2 (dry ice)
     Gas_O2,  // Oxygen/Steam
+    Gas_Lava,  // Vaporized lava/magma
     Gas_CO2,  // Carbon Dioxide
     Liquid_Water,
     Liquid_Lava,
-    ContaminatedWater
+    ContaminatedWater,
+    Solid_ContaminatedWater  // Frozen contaminated water
 };
 
 // Forward declaration
@@ -23,13 +27,17 @@ public:
     Element(const std::string& name, float density, float defaultTemp,
             float meltPoint, float boilPoint, float specHeat, float thermCond,
             float latentFusion, float latentVap, bool isFluid, bool isGas,
-            bool isLiquid, bool isSolid, float visc, float expandRate, float heatTransRate)
+            bool isLiquid, bool isSolid, float visc, float expandRate, 
+            float heatTransRate, float freezePoint, float condensePoint,
+            float sublimePoint = 0.0f, float vaporizePoint = 0.0f)
         : name(name), density(density), defaultTemperature(defaultTemp),
           meltingPoint(meltPoint), boilingPoint(boilPoint),
           specificHeatCapacity(specHeat), thermalConductivity(thermCond),
           latentHeatOfFusion(latentFusion), latentHeatOfVaporization(latentVap),
           isFluid(isFluid), isGas(isGas), isLiquid(isLiquid), isSolid(isSolid),
-          viscosity(visc), expansionRate(expandRate), heatTransferRate(heatTransRate) {}
+          viscosity(visc), expansionRate(expandRate), heatTransferRate(heatTransRate),
+          freezingPoint(freezePoint), condensationPoint(condensePoint),
+          sublimationPoint(sublimePoint), vaporizationPoint(vaporizePoint) {}
     
     virtual ~Element() = default;
     
@@ -56,6 +64,12 @@ public:
     float viscosity;  // Resistance to flow
     float expansionRate;  // Thermal expansion
     float heatTransferRate;  // Heat exchange speed multiplier
+    
+    // Phase change temperatures
+    float freezingPoint;         // °C (liquid → solid)
+    float condensationPoint;     // °C (gas → liquid)
+    float sublimationPoint;      // °C (solid → gas, if applicable)
+    float vaporizationPoint;     // °C (liquid → gas, alternative to boiling)
 };
 
 // Type alias for backward compatibility
@@ -65,56 +79,89 @@ typedef Element ElementProperties;
 class EmptyElement : public Element {
 public:
     EmptyElement() : Element("Empty", 0.0f, 20.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-                             false, false, false, false, 0.0f, 0.0f, 1.0f) {}
+                             false, false, false, false, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f) {}
 };
 
 class RockElement : public Element {
 public:
     RockElement() : Element("Rock", 2700.0f, 20.0f, 1200.0f, 3000.0f, 790.0f, 3.0f,
                             400000.0f, 6000000.0f, false, false, false, true,
-                            0.0f, 0.00001f, 1.5f) {}
+                            0.0f, 0.00001f, 1.5f, 1200.0f, 3000.0f) {}
 };
 
 class SteamElement : public Element {
 public:
-    SteamElement() : Element("Steam", 0.6f, 100.0f, -218.8f, -183.0f, 2000.0f, 0.026f,
-                             14000.0f, 2260000.0f, true, true, false, false,
-                             0.0f, 0.00367f, 0.5f) {}
+    SteamElement() : Element("Steam", 0.6f, 100.0f, 0.0f, 100.0f, 2000.0f, 0.026f,
+                             0.0f, 2260000.0f, true, true, false, false,
+                             0.0f, 0.00367f, 0.5f, 0.0f, 100.0f) {}
 };
 
 class CO2Element : public Element {
 public:
     CO2Element() : Element("CO2", 1.98f, 20.0f, -78.5f, -56.6f, 840.0f, 0.016f,
                            0.0f, 574000.0f, true, true, false, false,
-                           0.0f, 0.00367f, 0.5f) {}
+                           0.0f, 0.00367f, 0.5f, -78.5f, -56.6f) {}
+};
+
+class DryIceElement : public Element {
+public:
+    DryIceElement() : Element("Dry Ice", 1.56f, -78.5f, -78.5f, -56.6f,
+                              840.0f, 0.016f, 0.0f, 574000.0f,
+                              false, false, false, true,
+                              0.0f, 0.0f, 0.5f, -78.5f, -56.6f) {}
 };
 
 class WaterElement : public Element {
 public:
     WaterElement() : Element("Water", 1000.0f, 20.0f, 0.0f, 100.0f, 4186.0f, 0.6f,
                              334000.0f, 2260000.0f, true, false, true, false,
-                             0.001f, 0.00021f, 1.0f) {}
+                             0.001f, 0.00021f, 1.0f, 0.0f, 100.0f) {}
 };
 
 class LavaElement : public Element {
 public:
-    LavaElement() : Element("Lava", 3100.0f, 1200.0f, 700.0f, 1200.0f, 840.0f, 1.5f,
+    LavaElement() : Element("Lava", 3100.0f, 1200.0f, 700.0f, 3000.0f, 840.0f, 1.5f,
                             400000.0f, 6000000.0f, true, false, true, false,
-                            1000.0f, 0.00003f, 2.0f) {}
+                            50.0f, 0.00003f, 2.0f, 700.0f, 3000.0f, 0.0f, 3000.0f) {}
 };
 
 class ContaminatedWaterElement : public Element {
 public:
     ContaminatedWaterElement() : Element("Contaminated Water", 1050.0f, 20.0f, -2.0f, 101.0f,
                                          4000.0f, 0.5f, 320000.0f, 2200000.0f,
-                                         true, false, true, false, 0.0012f, 0.00021f, 1.0f) {}
+                                         true, false, true, false, 0.0012f, 0.00021f, 1.0f,
+                                         -2.0f, 101.0f) {}
 };
 
 class VacuumElement : public Element {
 public:
     VacuumElement() : Element("Vacuum", 0.0f, -273.15f, 0.0f, 0.0f, 0.0f, 0.0f,
                               0.0f, 0.0f, false, false, false, false,
-                              0.0f, 0.0f, 0.0f) {}  // Zero heat transfer!
+                              0.0f, 0.0f, 0.0f, 0.0f, 0.0f) {}  // Zero heat transfer!
+};
+
+// NEW: Phase change elements
+class IceElement : public Element {
+public:
+    IceElement() : Element("Ice", 917.0f, -10.0f, 0.0f, 100.0f, 2090.0f, 2.18f,
+                           334000.0f, 2260000.0f, false, false, false, true,
+                           0.0f, 0.00005f, 1.2f, 0.0f, 100.0f) {}
+};
+
+class Gas_LavaElement : public Element {
+public:
+    Gas_LavaElement() : Element("Gas Lava", 5.0f, 3000.0f, 700.0f, 3000.0f, 
+                                500.0f, 0.05f, 400000.0f, 8000000.0f, 
+                                true, true, false, false, 0.0f, 0.001f, 0.3f,
+                                700.0f, 3000.0f) {}
+};
+
+class Solid_ContaminatedWaterElement : public Element {
+public:
+    Solid_ContaminatedWaterElement() : Element("Frozen Contaminated Water", 980.0f, -10.0f, 
+                                                -2.0f, 101.0f, 2000.0f, 2.0f,
+                                                320000.0f, 2200000.0f, false, false, false, true,
+                                                0.0f, 0.00005f, 1.1f, -2.0f, 101.0f) {}
 };
 
 // Element registry - provides access to element instances
@@ -128,9 +175,13 @@ private:
     static EmptyElement emptyInstance;
     static VacuumElement vacuumInstance;
     static RockElement solidInstance;
+    static IceElement iceInstance;
+    static DryIceElement dryIceInstance;
     static SteamElement gasO2Instance;
+    static Gas_LavaElement gasLavaInstance;
     static CO2Element gasCO2Instance;
     static WaterElement waterInstance;
     static LavaElement lavaInstance;
     static ContaminatedWaterElement contaminatedWaterInstance;
+    static Solid_ContaminatedWaterElement solidContaminatedWaterInstance;
 };

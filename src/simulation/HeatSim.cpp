@@ -394,10 +394,17 @@ void HeatSim::checkPhaseChangeTriggers(int x, int y, float /*deltaTime*/) {
                 float mergeAmount = std::min(newMass, spaceAvailable);
                 
                 neighbor.mass += mergeAmount;
+                neighbor.updated = true;  // Mark neighbor as updated so it flows next tick
+                neighbor.updateColor();  // Update color for new mass
                 newMass -= mergeAmount;
                 
-                // If all mass merged, this cell becomes vacuum (COMPLETE cleanup)
-                if (newMass < 0.01f) {
+                // If remaining mass is too small, cap it at 0.001kg to prevent micro-cells
+                if (newMass < 0.001f && newMass > 0.0f) {
+                    newMass = 0.001f;  // Cap at minimum, don't convert to vacuum
+                }
+                
+                // If all mass merged (zero remaining), this cell becomes vacuum
+                if (newMass < 0.0001f) {
                     cell.elementType = ElementType::Vacuum;
                     cell.mass = 0.0f;
                     cell.pressure = 0.0f;

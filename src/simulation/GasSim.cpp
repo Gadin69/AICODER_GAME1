@@ -80,9 +80,9 @@ bool GasSim::update(float deltaTime) {
         for (int x = 1; x < width - 1; ++x) {
             if (!grid->isValidPosition(x, y)) continue;
             
-            // GAS CELLS ALWAYS SIMULATE - no LOD skipping!
-            // Gases are dynamic and must keep moving/spreading even off-screen
-            // if (!shouldUpdateCell(x, y, deltaTime)) continue;  // REMOVED for gas
+            // GAS CELLS: ALWAYS spread to conserve mass (no LOD skipping!)
+            // Mass conservation is critical - skipping spread causes mass loss
+            // LOD is only applied in the FLOW step below
             
             // Only process gas cells from snapshot
             if (!isGasType(gasSnapshot[y][x].type)) continue;
@@ -102,7 +102,7 @@ bool GasSim::update(float deltaTime) {
             
             float currentMass = gasSnapshot[y][x].mass;
             float currentPressure = gasSnapshot[y][x].pressure;
-            if (currentMass < MIN_GAS_MASS) continue;
+            // ALL gas cells spread regardless of mass - no minimum threshold
             
             // 4-directional neighbors (like heat transfer)
             int neighbors[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
@@ -119,8 +119,9 @@ bool GasSim::update(float deltaTime) {
             // Calculate how much mass to spread to each neighbor
             // Spread rate depends on pressure differential
             // BUOYANCY: Directional weights applied per-direction below
-            // Total spread: 70% of mass per tick (35% up, 15% left, 15% right, 5% down)
+            // Equal distribution: 20% per direction (total 80% per tick)
             
+            // SPREAD LOOP: Transfer to all 4 directions
             for (int i = 0; i < 4; i++) {
                 auto& dir = priorityNeighbors[i];
                 int nx = x + dir[0];
@@ -135,37 +136,23 @@ bool GasSim::update(float deltaTime) {
                 
                 if (!isVacuum && !isGas) continue;  // Skip liquids and solids
                 
-                // BUOYANCY: Apply directional weight
-                float spreadAmount = currentMass * directionalWeights[i];
+                // Calculate transfer amount using directional weight
+                float transferAmount = currentMass * directionalWeights[i];
                 
-                // For gas neighbors, check pressure differential
+                // For gas neighbors, apply pressure differential
                 if (isGas) {
                     float neighborPressure = gasSnapshot[ny][nx].pressure;
                     
-                    // Allow spreading even at near-equilibrium (thermal motion / Brownian motion)
                     // Only stop if neighbor pressure is SIGNIFICANTLY higher (20% threshold)
                     if (neighborPressure > currentPressure * 1.2f) continue;
                     
                     // Reduce spread amount based on pressure similarity
-                    // More gradual reduction - gases should keep mixing even near equilibrium
                     float pressureRatio = neighborPressure / currentPressure;
-                    float spreadModifier = 1.0f - (pressureRatio * 0.3f);  // 70% spread even at equal pressure
-                    spreadAmount *= std::max(spreadModifier, 0.1f);  // Minimum 10% of directional weight
+                    float spreadModifier = 1.0f - (pressureRatio * 0.3f);
+                    transferAmount *= std::max(spreadModifier, 0.1f);
                 }
                 
-                // Calculate transfer amount
-                float transferAmount = spreadAmount;
-                transferAmount = std::min(transferAmount, currentMass - MIN_GAS_MASS);
-                
-                // PREVENTION: Don't create micro-cells below threshold
-                // If neighbor is vacuum, check if transfer would create cell below MIN_GAS_MASS
-                if (isVacuum && transferAmount < MIN_GAS_MASS) {
-                    // Skip this transfer - would create a micro-cell
-                    if (isSpawnedDebug && spawnDebugCount <= 10) {
-                        std::cout << "    -> SKIPPED (would create micro-cell: " << transferAmount << "kg < " << MIN_GAS_MASS << "kg)" << std::endl;
-                    }
-                    continue;
-                }
+                // Transfer to neighbor - no minimum threshold blocking
                 
                 if (isSpawnedDebug && spawnDebugCount <= 10) {
                     std::cout << "  [" << (isVacuum ? "VAC" : "GAS") << "] (" << nx << "," << ny 
@@ -333,7 +320,14 @@ bool GasSim::update(float deltaTime) {
                 Cell& cell = grid->getCell(x, y);
                 if (!isGasType(cell.elementType)) continue;
                 
+                // LOD CHECK: Skip flow for far-away cells (spreading already happened)
+                if (!shouldUpdateCell(x, y, deltaTime)) continue;
+                
                 float cellMass = cell.mass;
+                
+                // SKIP FLOW if this cell just spread mass this tick
+                // Prevents gas from spreading outward then immediately merging back
+                if (massOut[y][x] > 0.0001f) continue;
                 
                 // DEBUG: Log flow attempts for spawned gas
                 static int flowDebugCount = 0;
@@ -343,20 +337,17 @@ bool GasSim::update(float deltaTime) {
                     flowDebugCount++;
                 }
                 
-                // GAS FLOW: Try to move/merge in all directions EXCEPT downward
-                // Gas can be PUSHED down by denser gas, but won't intentionally flow down
-                // Gas expands upward via SPREADING (buoyancy), flows sideways/merges here
+                // GAS FLOW: Scan ALL directions, prioritize VACUUM over merge
+                // This prevents gas from merging when it could flow into empty space
                 
-                // Priority order: UP, UP-DIAGONAL (random), SIDEWAYS (random)
-                // NO intentional downward flow - gas only goes down if pushed
-                // Total: 5 directions (up, up-left, up-right, left, right)
-                int directions[5][2];
+                // Define 7 directions: UP, UP-DIAGONALS, SIDEWAYS, DOWN (randomized)
+                int directions[7][2];
                 int dirCount = 0;
                 
-                // UP first (buoyancy - gas wants to rise)
+                // UP first (buoyancy - highest priority)
                 directions[dirCount][0] = 0; directions[dirCount][1] = -1; dirCount++;
                 
-                // UP-DIAGONAL (randomize left/right)
+                // UP-DIAGONAL (randomize)
                 if (simpleRand() % 2 == 0) {
                     directions[dirCount][0] = -1; directions[dirCount][1] = -1; dirCount++;
                     directions[dirCount][0] = 1; directions[dirCount][1] = -1; dirCount++;
@@ -365,7 +356,7 @@ bool GasSim::update(float deltaTime) {
                     directions[dirCount][0] = -1; directions[dirCount][1] = -1; dirCount++;
                 }
                 
-                // SIDEWAYS (randomize left/right)
+                // SIDEWAYS (randomize)
                 if (simpleRand() % 2 == 0) {
                     directions[dirCount][0] = -1; directions[dirCount][1] = 0; dirCount++;
                     directions[dirCount][0] = 1; directions[dirCount][1] = 0; dirCount++;
@@ -374,7 +365,13 @@ bool GasSim::update(float deltaTime) {
                     directions[dirCount][0] = -1; directions[dirCount][1] = 0; dirCount++;
                 }
                 
-                // Try each direction in priority order
+                // DOWN last (lowest priority - gas only flows down if pushed)
+                directions[dirCount][0] = 0; directions[dirCount][1] = 1; dirCount++;
+                
+                // First pass: Look for vacuum in any direction
+                int vacuumDir = -1;
+                int mergeDir = -1;
+                
                 for (int i = 0; i < dirCount; i++) {
                     int nx = x + directions[i][0];
                     int ny = y + directions[i][1];
@@ -386,65 +383,76 @@ bool GasSim::update(float deltaTime) {
                     
                     bool isVacuum = (neighborType == ElementType::Vacuum);
                     bool isSameGas = isGasType(neighborType) && neighborType == cell.elementType;
-                    bool isDifferentGas = isGasType(neighborType) && neighborType != cell.elementType;
                     
-                    // DEBUG: Show what neighbor type was found
-                    if (isSpawnedFlow && flowDebugCount <= 10) {
-                        std::cout << "  Dir " << i << ": (" << nx << "," << ny << ") type=" << (int)neighborType 
-                                  << " vacuum=" << isVacuum << " sameGas=" << isSameGas << std::endl;
+                    if (isVacuum && vacuumDir == -1) {
+                        vacuumDir = i;  // Found vacuum, remember it
                     }
-                    
-                    FlowAction action;
-                    action.fromX = x; action.fromY = y;
-                    action.toX = nx; action.toY = ny;
-                    action.massToMove = cellMass;
-                    action.temperature = cell.temperature;
-                    action.type = cell.elementType;
+                    else if (isSameGas && mergeDir == -1) {
+                        mergeDir = i;  // Found same gas, remember as backup
+                    }
+                }
+                
+                // PRIORITY: Vacuum > Merge
+                int chosenDir = (vacuumDir != -1) ? vacuumDir : mergeDir;
+                
+                if (chosenDir == -1) continue;  // No valid moves
+                
+                // Execute the chosen action
+                int nx = x + directions[chosenDir][0];
+                int ny = y + directions[chosenDir][1];
+                Cell& neighbor = grid->getCell(nx, ny);
+                ElementType neighborType = neighbor.elementType;
+                
+                bool isVacuum = (neighborType == ElementType::Vacuum);
+                bool isSameGas = isGasType(neighborType) && neighborType == cell.elementType;
+                
+                FlowAction action;
+                action.fromX = x; action.fromY = y;
+                action.toX = nx; action.toY = ny;
+                action.massToMove = cellMass;
+                action.temperature = cell.temperature;
+                action.type = cell.elementType;
+                action.isMerge = false;
+                
+                if (isVacuum) {
+                    // VACUUM: Swap (gas moves into vacuum)
                     action.isMerge = false;
-                    
-                    if (isVacuum) {
-                        // VACUUM: Always swap (gas moves into vacuum)
-                        action.isMerge = false;
+                    flowActions.push_back(action);
+                }
+                else if (isSameGas) {
+                        // SAME GAS: Pressure-based merge decision
+                        float spaceAvailable = 2.0f - neighbor.mass;  // 2kg max per cell
+                        
+                        if (spaceAvailable < 0.001f) {
+                            // Neighbor is full, try next direction
+                            continue;
+                        }
+                        
+                        // PRESSURE-BASED MERGE: Check if pressures are close enough to merge
+                        // If pressures are similar (within 3x ratio), merge to collect
+                        // If very different, let spreading handle equalization
+                        float pressureRatio = (neighbor.pressure > 0.001f) ? 
+                                            (cell.pressure / neighbor.pressure) : 1000.0f;
+                        
+                        bool shouldMerge = (pressureRatio >= 0.33f && pressureRatio <= 3.0f);
+                        
+                        if (!shouldMerge) {
+                            // Pressures too different - don't merge, try next direction
+                            continue;
+                        }
+                        
+                        // Calculate how much mass to transfer
+                        float transferAmount = std::min(cellMass, spaceAvailable);
+                        
+                        if (transferAmount < 0.0001f) {
+                            // Too tiny to bother, try next direction
+                            continue;
+                        }
+                        
+                        // MERGE: Transfer mass to neighbor
+                        action.massToMove = transferAmount;
+                        action.isMerge = true;
                         flowActions.push_back(action);
-                        break;  // Found a valid move
-                    }
-                    else if (isSameGas) {
-                        // SAME GAS: Merge if room, otherwise try next direction
-                        float spaceAvailable = 2.0f - neighbor.mass;  // 2kg max
-                        
-                        // Can only merge mass that leaves source above MIN_GAS_MASS
-                        float maxMergeAmount = cellMass - MIN_GAS_MASS;
-                        if (maxMergeAmount < MIN_GAS_MASS) {
-                            // Not enough mass to merge without creating micro-cell
-                            continue;
-                        }
-                        
-                        float actualMergeAmount = std::min(cellMass - MIN_GAS_MASS, spaceAvailable);
-                        
-                        if (actualMergeAmount >= MIN_GAS_MASS && spaceAvailable > 0.001f) {
-                            // Merge: push mass that fits and keeps source above threshold
-                            action.massToMove = actualMergeAmount;
-                            action.isMerge = true;
-                            flowActions.push_back(action);
-                            break;
-                        } else {
-                            // No room or can't merge meaningful amount - try next direction
-                            continue;
-                        }
-                    }
-                    else if (isDifferentGas) {
-                        // DIFFERENT GAS: Swap based on density
-                        const Element& cellProps = ElementTypes::getElement(cell.elementType);
-                        const Element& neighborProps = ElementTypes::getElement(neighborType);
-                        
-                        // Lighter gas rises through heavier gas
-                        if (cellProps.density < neighborProps.density) {
-                            action.isMerge = false;  // Swap, not merge
-                            flowActions.push_back(action);
-                            break;
-                        }
-                        // Heavier gas - don't swap, try next direction
-                    }
                 }
             }
         }
@@ -476,12 +484,31 @@ bool GasSim::update(float deltaTime) {
                 toCell.mass += massToMerge;
                 toCell.temperature = newTemp;
                 toCell.updated = true;
+                toCell.updateColor();
                 calculatePressure(action.toX, action.toY);
                 
-                // Leftover stays in original cell (already guaranteed to be >= MIN_GAS_MASS)
+                // Handle leftover in source cell
                 fromCell.mass = leftover;
-                fromCell.updated = true;
-                calculatePressure(action.fromX, action.fromY);
+                
+                // If source cell is now below threshold, convert to vacuum
+                if (leftover < 0.000001f) {
+                    fromCell.elementType = ElementType::Vacuum;
+                    fromCell.mass = 0.0f;
+                    fromCell.pressure = 0.0f;
+                    fromCell.temperature = -273.15f;
+                    fromCell.velocityX = 0.0f;
+                    fromCell.velocityY = 0.0f;
+                    fromCell.updated = false;
+                    fromCell.targetElementType = ElementType::Empty;
+                    fromCell.phaseTransitionProgress = 0.0f;
+                    fromCell.phaseTransitionSpeed = 0.0f;
+                    fromCell.microMassDecayTime = 0.0f;
+                    fromCell.color = sf::Color(10, 10, 15);
+                } else {
+                    fromCell.updated = true;
+                    fromCell.updateColor();
+                    calculatePressure(action.fromX, action.fromY);
+                }
             } else {
                 // SWAP: Exchange ALL cell data
                 ElementType tempType = fromCell.elementType;

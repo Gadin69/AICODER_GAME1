@@ -20,6 +20,7 @@ private:
     void updateLiquid(int x, int y);
     void moveLiquidDown(int x, int y);
     void moveLiquidSideways(int x, int y);
+    void leakLiquidDiagonally(int x, int y, float deltaTime);
     void applyViscosity(int x, int y);
     
     bool isLiquidType(ElementType type);

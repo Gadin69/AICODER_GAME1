@@ -56,8 +56,7 @@ bool FluidSim::update(float deltaTime) {
             float flowRate = 1.0f / (1.0f + props.viscosity * 0.1f);  // 0.0 to 1.0
             float massToFlow = cellMass * flowRate;
             
-            // Minimum mass to flow (prevent micro-transfers)
-            if (massToFlow < 0.001f) continue;
+            // ALL liquid cells flow regardless of mass - no minimum threshold
             
             // PRIORITY ORDER: DOWN, DOWN-DIAGONAL (random), SIDEWAYS (random)
             // Total: 5 directions

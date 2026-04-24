@@ -44,6 +44,8 @@ bool isRightMouseHeld = false;
 
 // UI Slider for simulation speed
 UISlider* simSpeedSlider = nullptr;
+float previousSimSpeed = 1.0f;  // Stores speed before spacebar pause
+bool isSpeedPaused = false;     // Tracks if spacebar pause is active
 bool isAdminMode = DEVELOPER_MODE;  // Auto-enabled if DEVELOPER_MODE is true
 bool showElementInspector = DEVELOPER_MODE;  // Toggle element inspection overlay
 sf::Text* inspectorText = nullptr;  // Hover inspection display
@@ -306,9 +308,8 @@ void placeCellAtMouse(sf::Mouse::Button button) {
         
         // GASES use mass like everything else
         if (props.isGas) {
-            // Steam/gas has 1/5 the mass of water (0.2 kg vs 1.0 kg)
-            // 1 water cell → 5 steam cells when boiled
-            placedCell.mass = 0.2f;  // Fixed 0.2 kg for all gases
+            // EXPERIMENT: 100kg gas spawn to test mass conservation
+            placedCell.mass = 100.0f;  // 100.0 kg for testing
             // Calculate initial pressure using ideal gas law
             placedCell.pressure = (placedCell.mass * 8.314f * (placedCell.temperature + 273.15f)) / 0.001f;
             
@@ -865,6 +866,23 @@ int main() {
                     case sf::Keyboard::Scancode::Escape:
                         // Pause game
                         gameState = GameState::Paused;
+                        break;
+                    case sf::Keyboard::Scancode::Space:
+                        // Toggle simulation speed pause
+                        if (simSpeedSlider) {
+                            if (!isSpeedPaused) {
+                                // Store current speed and set to zero
+                                previousSimSpeed = simSpeedSlider->currentValue;
+                                simSpeedSlider->currentValue = 0.0f;
+                                isSpeedPaused = true;
+                            } else {
+                                // Restore previous speed
+                                simSpeedSlider->currentValue = previousSimSpeed;
+                                isSpeedPaused = false;
+                            }
+                            simSpeedSlider->updateThumbPosition();
+                            simSpeedSlider->updateValueText();
+                        }
                         break;
                         }
                     }
