@@ -272,6 +272,10 @@ void SettingsMenu::buildButtons() {
 void SettingsMenu::switchCategory(int category) {
     activeCategory = category;
     
+    // Close any open dropdowns when switching tabs
+    displayDropdown.isOpen = false;
+    resolutionDropdown.isOpen = false;
+    
     // Clear current content from contentBorder
     contentBorder.clearChildren();
     
@@ -365,9 +369,11 @@ void SettingsMenu::render(Renderer& renderer) {
     contentBorder.render(renderer);
     buttonBorder.render(renderer);
     
-    // Render dropdown popups AFTER borders (highest z-order)
-    displayDropdown.render(renderer);
-    resolutionDropdown.render(renderer);
+    // Render dropdown popups AFTER borders (highest z-order) - only when Graphics tab is active
+    if (activeCategory == 1) {
+        displayDropdown.render(renderer);
+        resolutionDropdown.render(renderer);
+    }
 }
 
 MenuAction SettingsMenu::handleEvent(const sf::Event& event) {
