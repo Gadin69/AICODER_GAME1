@@ -53,6 +53,10 @@ void GameConsole::initialize(float x, float y, float width, float height, const 
         addOutput("Admin mode command - implementation pending", sf::Color(200, 200, 100));
     }, "Toggle admin/developer mode (implementation pending)");
     
+    registerCommand("devmode", [this](const std::vector<std::string>& args) {
+        addOutput("Developer mode command - implementation pending", sf::Color(200, 200, 100));
+    }, "Toggle developer mode tools and features (implementation pending)");
+    
     initialized = true;
 }
 
