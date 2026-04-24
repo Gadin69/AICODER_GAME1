@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UIElement.h"
 #include <SFML/Graphics.hpp>
 #include <vector>
 
@@ -14,7 +15,10 @@ public:
     void setSize(float width, float height);  // Resizes and scales children
     void setPosition(float x, float y);
     
-    // Add child with relative position/size (0.0-1.0 percentages)
+    // NEW: Add polymorphic UIElement child (preferred method)
+    void addChild(UIElement* child, float relX, float relY, float relWidth, float relHeight);
+    
+    // OLD: Add SFML primitive child (backward compatibility)
     void addChild(sf::RectangleShape* child, float relX, float relY, float relWidth, float relHeight);
     void addChild(sf::Text* child, float relX, float relY);  // Text uses font scaling
     
@@ -34,7 +38,15 @@ public:
 private:
     sf::RectangleShape border;
     
-    struct ChildElement {
+    // Polymorphic UIElement children
+    struct UIElementChild {
+        UIElement* element;
+        float relX, relY, relWidth, relHeight;  // Percentages
+    };
+    std::vector<UIElementChild> uiElementChildren;
+    
+    // SFML primitive children (backward compatibility)
+    struct PrimitiveChild {
         enum Type { RECTANGLE, TEXT };
         Type type;
         union {
@@ -44,9 +56,10 @@ private:
         float relX, relY, relWidth, relHeight;  // Percentages
         float originalFontSize = 0.0f;  // For text scaling
     };
+    std::vector<PrimitiveChild> primitiveChildren;
     
-    std::vector<ChildElement> children;
     std::vector<sf::RectangleShape*> popupRectangles;  // Rendered on top (highest z-order)
     std::vector<sf::Text*> popupTexts;  // Rendered on top (highest z-order)
+    
     void updateChildPositions();  // Recalculates absolute positions from percentages
 };

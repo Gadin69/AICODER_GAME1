@@ -25,11 +25,26 @@ void UIBorder::setPosition(float x, float y) {
     updateChildPositions();  // Reposition all children
 }
 
+// NEW: Add polymorphic UIElement child
+void UIBorder::addChild(UIElement* child, float relX, float relY, float relWidth, float relHeight) {
+    if (!child) return;
+    
+    UIElementChild elemChild;
+    elemChild.element = child;
+    elemChild.relX = relX;
+    elemChild.relY = relY;
+    elemChild.relWidth = relWidth;
+    elemChild.relHeight = relHeight;
+    
+    uiElementChildren.push_back(elemChild);
+}
+
+// OLD: Add SFML RectangleShape child (backward compatibility)
 void UIBorder::addChild(sf::RectangleShape* child, float relX, float relY, float relWidth, float relHeight) {
     if (!child) return;  // Null check
     
-    ChildElement childElem;
-    childElem.type = ChildElement::RECTANGLE;
+    PrimitiveChild childElem;
+    childElem.type = PrimitiveChild::RECTANGLE;
     childElem.element.rect = child;
     childElem.relX = relX;
     childElem.relY = relY;
@@ -37,15 +52,15 @@ void UIBorder::addChild(sf::RectangleShape* child, float relX, float relY, float
     childElem.relHeight = relHeight;
     childElem.originalFontSize = 0.0f;
     
-    children.push_back(childElem);
+    primitiveChildren.push_back(childElem);
     // Don't call updateChildPositions() here - let render() handle it
 }
 
 void UIBorder::addChild(sf::Text* child, float relX, float relY) {
     if (!child) return;  // Null check
     
-    ChildElement childElem;
-    childElem.type = ChildElement::TEXT;
+    PrimitiveChild childElem;
+    childElem.type = PrimitiveChild::TEXT;
     childElem.element.text = child;
     childElem.relX = relX;
     childElem.relY = relY;
@@ -53,7 +68,7 @@ void UIBorder::addChild(sf::Text* child, float relX, float relY) {
     childElem.relHeight = 0.0f;  // Not used for text
     childElem.originalFontSize = static_cast<float>(child->getCharacterSize());
     
-    children.push_back(childElem);
+    primitiveChildren.push_back(childElem);
     // Don't call updateChildPositions() here - let render() handle it
 }
 
@@ -74,11 +89,18 @@ void UIBorder::render(Renderer& renderer) {
     // Draw border background
     renderer.drawRectangle(border);
     
-    // Draw all normal children
-    for (const auto& child : children) {
-        if (child.type == ChildElement::RECTANGLE) {
+    // Render all UIElement children (polymorphic)
+    for (const auto& child : uiElementChildren) {
+        if (child.element->isVisible()) {
+            child.element->render(renderer);
+        }
+    }
+    
+    // Draw all primitive SFML children (backward compatibility)
+    for (const auto& child : primitiveChildren) {
+        if (child.type == PrimitiveChild::RECTANGLE) {
             renderer.drawRectangle(*child.element.rect);
-        } else if (child.type == ChildElement::TEXT) {
+        } else if (child.type == PrimitiveChild::TEXT) {
             renderer.drawText(*child.element.text);
         }
     }
@@ -118,8 +140,20 @@ void UIBorder::updateChildPositions() {
     float borderWidth = border.getSize().x;
     float borderHeight = border.getSize().y;
     
-    for (auto& child : children) {
-        if (child.type == ChildElement::RECTANGLE) {
+    // Update UIElement children positions and sizes
+    for (auto& child : uiElementChildren) {
+        float absX = borderX + (child.relX * borderWidth);
+        float absY = borderY + (child.relY * borderHeight);
+        float absWidth = child.relWidth * borderWidth;
+        float absHeight = child.relHeight * borderHeight;
+        
+        child.element->setPosition(absX, absY);
+        child.element->setSize(absWidth, absHeight);
+    }
+    
+    // Update primitive SFML children positions and sizes
+    for (auto& child : primitiveChildren) {
+        if (child.type == PrimitiveChild::RECTANGLE) {
             // Calculate absolute position and size
             float absX = borderX + (child.relX * borderWidth);
             float absY = borderY + (child.relY * borderHeight);
@@ -129,7 +163,7 @@ void UIBorder::updateChildPositions() {
             child.element.rect->setPosition(sf::Vector2f(absX, absY));
             child.element.rect->setSize(sf::Vector2f(absWidth, absHeight));
             
-        } else if (child.type == ChildElement::TEXT) {
+        } else if (child.type == PrimitiveChild::TEXT) {
             // Calculate absolute position
             float absX = borderX + (child.relX * borderWidth);
             float absY = borderY + (child.relY * borderHeight);
