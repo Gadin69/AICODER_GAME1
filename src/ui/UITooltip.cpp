@@ -10,7 +10,8 @@ UITooltip::~UITooltip() {
 }
 
 void UITooltip::initialize(const sf::Font& font) {
-    fontPtr = const_cast<sf::Font*>(&font);
+    // Set base class properties
+    fontPtr = &font;
     
     // Background
     background.setSize(sf::Vector2f(200.0f, 40.0f));
@@ -26,7 +27,7 @@ void UITooltip::initialize(const sf::Font& font) {
 }
 
 void UITooltip::render(Renderer& renderer) {
-    if (!initialized || !isVisible) return;
+    if (!initialized || !isVisible()) return;
     
     // Apply fade
     sf::Color bgColor = background.getFillColor();
@@ -64,11 +65,11 @@ void UITooltip::show(const std::string& tooltipTextParam, float x, float y) {
     isFadingIn = true;
     isFadingOut = false;
     fadeTime = 0.0f;
-    isVisible = true;
+    setVisible(true);
 }
 
 void UITooltip::hide() {
-    if (!isVisible) return;
+    if (!isVisible()) return;
     
     // Start fade out
     isFadingOut = true;
@@ -136,7 +137,7 @@ void UITooltip::update(float deltaTime) {
         
         if (currentAlpha <= 0.0f) {
             isFadingOut = false;
-            isVisible = false;
+            setVisible(false);
             currentAlpha = 0.0f;
         }
     }

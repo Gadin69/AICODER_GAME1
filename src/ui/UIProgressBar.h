@@ -1,17 +1,18 @@
 #pragma once
 
+#include "UIElement.h"
 #include <SFML/Graphics.hpp>
 #include <string>
 
 class Renderer;  // Forward declaration
 
-class UIProgressBar {
+class UIProgressBar : public UIElement {
 public:
     UIProgressBar();
-    ~UIProgressBar();
+    ~UIProgressBar() override;
     
     void initialize(float x, float y, float width, float height, float minVal, float maxVal, float defaultVal, const sf::Font& font);
-    void render(Renderer& renderer);
+    void render(Renderer& renderer) override;
     
     void setValue(float value);
     void setMin(float min);
@@ -20,16 +21,15 @@ public:
     void setShowText(bool show);
     void setColors(sf::Color background, sf::Color fill, sf::Color text);
     
+    // Component-specific state (public for now)
     sf::RectangleShape background;
     sf::RectangleShape fillBar;
     sf::Text* valueText = nullptr;
-    sf::Font* fontPtr = nullptr;
     
     float currentValue;
     float minValue;
     float maxValue;
     bool showText = true;
-    bool initialized = false;
     
 private:
     sf::Color bgColor = sf::Color(40, 40, 40);

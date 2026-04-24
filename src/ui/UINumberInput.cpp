@@ -15,7 +15,11 @@ UINumberInput::~UINumberInput() {
 }
 
 void UINumberInput::initialize(float x, float y, float width, float height, float minVal, float maxVal, float defaultVal, const sf::Font& font) {
-    fontPtr = const_cast<sf::Font*>(&font);
+    // Set base class properties
+    position = sf::Vector2f(x, y);
+    size = sf::Vector2f(width, height);
+    fontPtr = &font;
+    
     minValue = minVal;
     maxValue = maxVal;
     value = defaultVal;

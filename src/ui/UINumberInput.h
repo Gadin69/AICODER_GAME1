@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UIElement.h"
 #include <SFML/Graphics.hpp>
 #include <string>
 #include <functional>
@@ -7,24 +8,25 @@
 class Renderer;  // Forward declaration
 class UIButton;  // Forward declaration
 
-class UINumberInput {
+class UINumberInput : public UIElement {
 public:
     UINumberInput();
-    ~UINumberInput();
+    ~UINumberInput() override;
     
     void initialize(float x, float y, float width, float height, float minVal, float maxVal, float defaultVal, const sf::Font& font);
-    void render(Renderer& renderer);
+    void render(Renderer& renderer) override;
     
-    void handleMousePress(const sf::Vector2f& mousePos);
-    void handleMouseMove(const sf::Vector2f& mousePos);
-    void handleMouseRelease();
-    void handleKeyPress(const sf::Event::KeyPressed& keyEvent);
-    void handleTextEntered(const sf::Event::TextEntered& textEvent);
+    void handleMousePress(const sf::Vector2f& mousePos) override;
+    void handleMouseMove(const sf::Vector2f& mousePos) override;
+    void handleMouseRelease() override;
+    void handleKeyPress(const sf::Event::KeyPressed& keyEvent) override;
+    void handleTextEntered(const sf::Event::TextEntered& textEvent) override;
     
     void setValue(float value);
     void setStep(float step);
     void setCallback(std::function<void(float)> callback);
     
+    // Component-specific state (public for now)
     sf::RectangleShape displayBox;
     sf::Text* valueText = nullptr;
     sf::Text* labelText = nullptr;
@@ -32,7 +34,6 @@ public:
     sf::RectangleShape plusBtn;
     sf::Text* minusText = nullptr;
     sf::Text* plusText = nullptr;
-    sf::Font* fontPtr = nullptr;
     std::function<void(float)> onChange = nullptr;
     
     float value;
@@ -40,7 +41,6 @@ public:
     float maxValue;
     float stepSize = 1.0f;
     bool isFocused = false;
-    bool initialized = false;
     
 private:
     std::string inputBuffer;

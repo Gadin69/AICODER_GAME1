@@ -9,6 +9,9 @@ GameConsole::GameConsole() {}
 GameConsole::~GameConsole() {}
 
 void GameConsole::initialize(float x, float y, float width, float height, const sf::Font& font) {
+    // Set base class properties
+    position = sf::Vector2f(x, y);
+    size = sf::Vector2f(width, height);
     fontPtr = &font;
     
     // Background

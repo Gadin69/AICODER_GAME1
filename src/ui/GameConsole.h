@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UIElement.h"
 #include "UITextInput.h"
 #include <SFML/Graphics.hpp>
 #include <string>
@@ -8,19 +9,19 @@
 
 class Renderer;
 
-class GameConsole {
+class GameConsole : public UIElement {
 public:
     GameConsole();
-    ~GameConsole();
+    ~GameConsole() override;
     
     void initialize(float x, float y, float width, float height, const sf::Font& font);
-    void render(Renderer& renderer);
+    void render(Renderer& renderer) override;
     
     void handleToggle();  // Call when ` key is pressed
     void handleToggleKeyReleased();  // Call to clear any pending ` character
-    void handleMousePress(const sf::Vector2f& mousePos);
-    void handleKeyPress(const sf::Event::KeyPressed& keyEvent);
-    void handleTextEntered(const sf::Event::TextEntered& textEvent);
+    void handleMousePress(const sf::Vector2f& mousePos) override;
+    void handleKeyPress(const sf::Event::KeyPressed& keyEvent) override;
+    void handleTextEntered(const sf::Event::TextEntered& textEvent) override;
     void update(float deltaTime);
     
     bool isVisible() const { return visible; }

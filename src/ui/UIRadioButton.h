@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UIElement.h"
 #include <SFML/Graphics.hpp>
 #include <string>
 #include <functional>
@@ -7,29 +8,28 @@
 
 class Renderer;  // Forward declaration
 
-class UIRadioButton {
+class UIRadioButton : public UIElement {
 public:
     UIRadioButton();
-    ~UIRadioButton();
+    ~UIRadioButton() override;
     
     void initialize(float x, float y, const std::string& label, int groupId, const sf::Font& font);
-    void render(Renderer& renderer);
+    void render(Renderer& renderer) override;
     
-    void handleMousePress(const sf::Vector2f& mousePos);
+    void handleMousePress(const sf::Vector2f& mousePos) override;
     
     void setSelected(bool selected);
     void setGroupId(int id);
     static void clearGroup(int groupId);
     static void setCallback(int groupId, std::function<void(int)> callback);
     
+    // Component-specific state (public for now)
     sf::CircleShape outerCircle;
     sf::CircleShape innerCircle;
     sf::Text* labelText = nullptr;
-    sf::Font* fontPtr = nullptr;
     
     int groupId = 0;
     bool isSelected = false;
-    bool initialized = false;
     
 private:
     static std::map<int, std::vector<UIRadioButton*>> groups;
