@@ -9,6 +9,7 @@
 #include "ui/MainMenu.h"
 #include "ui/SettingsMenu.h"
 #include "ui/PauseMenu.h"
+#include "ui/GameConsole.h"
 #include "ecs/Entity.h"
 #include "ui/UISlider.h"
 #include <SFML/Graphics.hpp>
@@ -49,6 +50,9 @@ bool isSpeedPaused = false;     // Tracks if spacebar pause is active
 bool isAdminMode = DEVELOPER_MODE;  // Auto-enabled if DEVELOPER_MODE is true
 bool showElementInspector = DEVELOPER_MODE;  // Toggle element inspection overlay
 sf::Text* inspectorText = nullptr;  // Hover inspection display
+
+// In-game console
+GameConsole* gameConsole = nullptr;
 
 // Map overlay toggles (F keys)
 bool showHeatMapOverlay = false;  // F3 - Temperature visualization
@@ -183,6 +187,18 @@ void initializeFonts() {
     simSpeedSlider->initialize(10, 10, 300, 0.1f, 5.0f, 1.0f, "Sim Speed:", font);
     std::cout << "[INIT] simSpeedSlider initialized" << std::endl;
     
+    // Initialize in-game console
+    sf::Vector2u windowSize = renderer.getRenderWindow().getSize();
+    gameConsole = new GameConsole();
+    gameConsole->initialize(
+        50.0f,  // x
+        50.0f,  // y
+        (float)windowSize.x - 100.0f,  // width (screen width - margins)
+        400.0f,  // height
+        font
+    );
+    std::cout << "[INIT] GameConsole initialized" << std::endl;
+    
     // Initialize developer tools (only in DEVELOPER_MODE)
 #if DEVELOPER_MODE
     if (isAdminMode) {
@@ -237,6 +253,18 @@ void initializeFonts() {
 }
 
 void handleMouseInput(const sf::Event& event) {
+    // Route mouse events to console if visible
+    if (gameConsole && gameConsole->isVisible()) {
+        if (event.is<sf::Event::MouseButtonPressed>()) {
+            auto mouseButton = event.getIf<sf::Event::MouseButtonPressed>();
+            if (mouseButton) {
+                gameConsole->handleMousePress(sf::Vector2f(mouseButton->position.x, mouseButton->position.y));
+            }
+        }
+        // Don't process game mouse input when console is open
+        return;
+    }
+    
     if (event.is<sf::Event::MouseButtonPressed>()) {
         auto mouseButton = event.getIf<sf::Event::MouseButtonPressed>();
         if (mouseButton) {
@@ -635,6 +663,15 @@ void renderDemo() {
         renderer.getCamera().applyTo(renderer.getRenderWindow());
     }
     
+    // Render in-game console (if visible)
+    if (gameConsole && gameConsole->isVisible()) {
+        // Reset view to screen coordinates for console
+        sf::View defaultView = renderer.getRenderWindow().getDefaultView();
+        renderer.getRenderWindow().setView(defaultView);
+        
+        gameConsole->render(renderer);
+    }
+    
     // Render admin UI (developer mode only)
 #if DEVELOPER_MODE
     if (isAdminMode) {
@@ -863,6 +900,11 @@ int main() {
                         showDensityOverlay = !showDensityOverlay;
                         break;
 #endif
+                    case sf::Keyboard::Scancode::Grave:  // ` key - Toggle console
+                        if (gameConsole) {
+                            gameConsole->handleToggle();
+                        }
+                        break;
                     case sf::Keyboard::Scancode::Escape:
                         // Pause game
                         gameState = GameState::Paused;
@@ -919,12 +961,32 @@ int main() {
                     }
                 }
                 
+                // Route keyboard events to console when visible
+                if (gameConsole && gameConsole->isVisible()) {
+                    if (event.is<sf::Event::KeyPressed>()) {
+                        auto keyEvent = event.getIf<sf::Event::KeyPressed>();
+                        if (keyEvent) {
+                            gameConsole->handleKeyPress(*keyEvent);
+                        }
+                    } else if (event.is<sf::Event::TextEntered>()) {
+                        auto textEvent = event.getIf<sf::Event::TextEntered>();
+                        if (textEvent) {
+                            gameConsole->handleTextEntered(*textEvent);
+                        }
+                    }
+                }
+                
                 handleMouseInput(event);
             }
         };
         
         engine.onUpdate = [&engine](void) {
             float deltaTime = engine.getTime().getDeltaTime();
+            
+            // Skip game updates when console is open
+            if (gameConsole && gameConsole->isVisible()) {
+                return;  // Don't process game logic
+            }
             
             // Update camera smooth scrolling
             if (gameState == GameState::Playing) {

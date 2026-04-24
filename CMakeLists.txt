@@ -50,6 +50,7 @@ set(SOURCES
     src/ui/UIRadioButton.cpp
     src/ui/UITooltip.cpp
     src/ui/UINumberInput.cpp
+    src/ui/GameConsole.cpp
 )
 
 # Header files
@@ -99,6 +100,7 @@ set(HEADERS
     src/ui/UIRadioButton.h
     src/ui/UITooltip.h
     src/ui/UINumberInput.h
+    src/ui/GameConsole.h
 )
 
 # Create executable
