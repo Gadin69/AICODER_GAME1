@@ -415,25 +415,21 @@ MenuAction SettingsMenu::handleEvent(const sf::Event& event) {
                 break;
         }
         
-        // Handle bottom buttons
-        applyButton.handleMousePress(mousePosVec);
-        backButton.handleMousePress(mousePosVec);
-        resetButton.handleMousePress(mousePosVec);
+        // Handle bottom buttons through buttonBorder (automatic propagation)
+        buttonBorder.handleMousePress(mousePosVec);
     } else if (event.is<sf::Event::MouseButtonReleased>()) {
         // Handle slider releases
         cameraSpeedSlider.handleMouseRelease();
         cameraAccelSlider.handleMouseRelease();
         cameraMaxSpeedSlider.handleMouseRelease();
         
-        // Release triggers callbacks for buttons
-        applyButton.handleMouseRelease();
+        // Release triggers callbacks for tabs (buttons handled by buttonBorder)
+        buttonBorder.handleMouseRelease();
         controlsTab.handleMouseRelease();
         graphicsTab.handleMouseRelease();
         audioTab.handleMouseRelease();
         videoTab.handleMouseRelease();
         gameplayTab.handleMouseRelease();
-        backButton.handleMouseRelease();
-        resetButton.handleMouseRelease();
     } else if (event.is<sf::Event::MouseMoved>()) {
         auto mouseMove = event.getIf<sf::Event::MouseMoved>();
         if (mouseMove) {
@@ -463,9 +459,8 @@ MenuAction SettingsMenu::handleEvent(const sf::Event& event) {
                     break;
             }
             
-            applyButton.handleMouseMove(pos);
-            backButton.handleMouseMove(pos);
-            resetButton.handleMouseMove(pos);
+            // Handle bottom button hovers through buttonBorder (automatic propagation)
+            buttonBorder.handleMouseMove(pos);
         }
     }
     

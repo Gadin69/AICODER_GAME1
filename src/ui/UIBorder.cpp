@@ -188,3 +188,30 @@ void UIBorder::updateChildPositions() {
         }
     }
 }
+
+void UIBorder::handleMousePress(const sf::Vector2f& mousePos) {
+    // Propagate mouse press to all UIElement children
+    for (auto& child : uiElementChildren) {
+        if (child.element->isVisible()) {
+            child.element->handleMousePress(mousePos);
+        }
+    }
+}
+
+void UIBorder::handleMouseRelease() {
+    // Propagate mouse release to all UIElement children
+    for (auto& child : uiElementChildren) {
+        if (child.element->isVisible()) {
+            child.element->handleMouseRelease();
+        }
+    }
+}
+
+void UIBorder::handleMouseMove(const sf::Vector2f& mousePos) {
+    // Propagate mouse move to all UIElement children
+    for (auto& child : uiElementChildren) {
+        if (child.element->isVisible()) {
+            child.element->handleMouseMove(mousePos);
+        }
+    }
+}

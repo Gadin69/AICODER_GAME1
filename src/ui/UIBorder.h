@@ -28,6 +28,11 @@ public:
     
     void render(Renderer& renderer);
     
+    // Mouse event handling - propagates to all UIElement children
+    void handleMousePress(const sf::Vector2f& mousePos);
+    void handleMouseRelease();
+    void handleMouseMove(const sf::Vector2f& mousePos);
+    
     // Getters for mouse collision detection
     sf::Vector2f getPosition() const;
     sf::Vector2f getSize() const;
