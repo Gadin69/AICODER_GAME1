@@ -225,7 +225,6 @@ void SettingsMenu::buildButtons() {
     
     // Apply button (center-left)
     float applyX = buttonX + buttonWidth * 0.35f;
-    UIButton applyButton;
     applyButton.initialize(applyX, btnY, btnWidth, btnHeight, "Apply", font);
     applyButton.setColors(sf::Color(40, 120, 40), sf::Color(50, 150, 50), sf::Color(60, 180, 60));
     applyButton.setCallback([this]() {

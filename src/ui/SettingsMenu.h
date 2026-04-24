@@ -70,6 +70,7 @@ private:
     UISlider cameraMaxSpeedSlider;
     
     // Bottom buttons
+    UIButton applyButton;
     UIButton backButton;
     UIButton resetButton;
     
