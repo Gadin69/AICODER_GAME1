@@ -3,6 +3,8 @@
 #include <cmath>
 #include <algorithm>
 #include <iostream>
+#include <fstream>
+#include <iomanip>
 #include <chrono>
 
 GasSim::GasSim() 
@@ -12,24 +14,27 @@ GasSim::GasSim()
 bool GasSim::update(float deltaTime) {
     if (!enabled || !grid) return false;
     
+    // DEBUG: Log delta timing (COMMENTED OUT - too spammy)
+    /*
     static int debugDeltaTimeCount = 0;
     if (debugDeltaTimeCount < 30) {
         std::cout << "[GAS SIM] deltaTime=" << deltaTime << " updateTimer=" << updateTimer << std::endl;
         debugDeltaTimeCount++;
     }
+    */
     
     if (!shouldUpdate(deltaTime)) {
-        static int skipDebugCount = 0;
-        if (skipDebugCount++ % 50 == 0) {
-            std::cout << "[GAS SIM] SKIPPED (shouldUpdate returned false)" << std::endl;
-        }
+        // Don't spam logs - LOD skipping is normal
         return false;
     }
     
+    // DEBUG: Track update calls (COMMENTED OUT - too spammy)
+    /*
     static int updateDebugCount = 0;
     if (updateDebugCount++ < 20) {
         std::cout << "[GAS SIM] UPDATE #" << updateDebugCount << " called!" << std::endl;
     }
+    */
     
     int width = grid->getWidth();
     int height = grid->getHeight();
@@ -116,12 +121,16 @@ bool GasSim::update(float deltaTime) {
             // Weights: UP=0.20, LEFT=0.20, RIGHT=0.20, DOWN=0.20 (total=0.80)
             float directionalWeights[4] = {0.20f, 0.20f, 0.20f, 0.20f};
             
-            // Calculate how much mass to spread to each neighbor
-            // Spread rate depends on pressure differential
-            // BUOYANCY: Directional weights applied per-direction below
-            // Equal distribution: 20% per direction (total 80% per tick)
+            // Calculate how much mass to spread
+            // CRITICAL FIX: Split mass correctly to avoid mass loss!
+            // Total spread rate = 80% of mass per tick
+            float totalSpreadRate = 0.80f;  // 80% of mass spreads per tick
+            float massToSpread = currentMass * totalSpreadRate;
             
-            // SPREAD LOOP: Transfer to all 4 directions
+            // STEP 1: Count valid spread directions
+            int validDirCount = 0;
+            bool validDirections[4] = {false, false, false, false};
+            
             for (int i = 0; i < 4; i++) {
                 auto& dir = priorityNeighbors[i];
                 int nx = x + dir[0];
@@ -129,49 +138,57 @@ bool GasSim::update(float deltaTime) {
                 
                 if (!grid->isValidPosition(nx, ny)) continue;
                 
-                // Can spread to: vacuum or gas cells ONLY (not liquids)
                 ElementType neighborType = gasSnapshot[ny][nx].type;
                 bool isVacuum = (neighborType == ElementType::Vacuum);
                 bool isGas = isGasType(neighborType);
                 
-                if (!isVacuum && !isGas) continue;  // Skip liquids and solids
-                
-                // Calculate transfer amount using directional weight
-                float transferAmount = currentMass * directionalWeights[i];
-                
-                // For gas neighbors, apply pressure differential
-                if (isGas) {
-                    float neighborPressure = gasSnapshot[ny][nx].pressure;
-                    
-                    // Only stop if neighbor pressure is SIGNIFICANTLY higher (20% threshold)
-                    if (neighborPressure > currentPressure * 1.2f) continue;
-                    
-                    // Reduce spread amount based on pressure similarity
-                    float pressureRatio = neighborPressure / currentPressure;
-                    float spreadModifier = 1.0f - (pressureRatio * 0.3f);
-                    transferAmount *= std::max(spreadModifier, 0.1f);
-                }
-                
-                // Transfer to neighbor - no minimum threshold blocking
-                
-                if (isSpawnedDebug && spawnDebugCount <= 10) {
-                    std::cout << "  [" << (isVacuum ? "VAC" : "GAS") << "] (" << nx << "," << ny 
-                              << ") pressure=" << (isGas ? gasSnapshot[ny][nx].pressure : 0.0f)
-                              << " transfer=" << transferAmount << std::endl;
-                }
-                
-                if (transferAmount > 0.00001f) {  // Allow microscopic transfers for continuous spreading
-                    massOut[y][x] += transferAmount;
-                    massIn[ny][nx].mass += transferAmount;
-                    massIn[ny][nx].temperatureSum += gasSnapshot[y][x].temperature;
-                    massIn[ny][nx].sourceCount++;
-                    
-                    if (isSpawnedDebug && spawnDebugCount <= 10) {
-                        std::cout << "    -> TRANSFERRING " << transferAmount << "kg to (" << nx << "," << ny << ")" << std::endl;
+                if (isVacuum || isGas) {
+                    // Check pressure for gas neighbors
+                    if (isGas) {
+                        float neighborPressure = gasSnapshot[ny][nx].pressure;
+                        if (neighborPressure <= currentPressure * 1.2f) {
+                            validDirections[i] = true;
+                            validDirCount++;
+                        }
+                    } else {
+                        // Vacuum is always valid
+                        validDirections[i] = true;
+                        validDirCount++;
                     }
-                } else {
-                    if (isSpawnedDebug && spawnDebugCount <= 10) {
-                        std::cout << "    -> SKIPPED (transferAmount=" << transferAmount << " < 0.0001)" << std::endl;
+                }
+            }
+            
+            // STEP 2: Split mass among valid directions and apply transfers
+            if (validDirCount > 0 && massToSpread > 0.00001f) {
+                float massPerDirection = massToSpread / validDirCount;
+                
+                for (int i = 0; i < 4; i++) {
+                    if (!validDirections[i]) continue;
+                    
+                    auto& dir = priorityNeighbors[i];
+                    int nx = x + dir[0];
+                    int ny = y + dir[1];
+                    
+                    ElementType neighborType = gasSnapshot[ny][nx].type;
+                    bool isVacuum = (neighborType == ElementType::Vacuum);
+                    bool isGas = isGasType(neighborType);
+                    
+                    // Calculate transfer amount
+                    float transferAmount = massPerDirection;
+                    
+                    // For gas neighbors, apply pressure differential
+                    if (isGas) {
+                        float neighborPressure = gasSnapshot[ny][nx].pressure;
+                        float pressureRatio = neighborPressure / currentPressure;
+                        float spreadModifier = 1.0f - (pressureRatio * 0.3f);
+                        transferAmount *= std::max(spreadModifier, 0.1f);
+                    }
+                    
+                    if (transferAmount > 0.00001f) {
+                        massOut[y][x] += transferAmount;
+                        massIn[ny][nx].mass += transferAmount;
+                        massIn[ny][nx].temperatureSum += gasSnapshot[y][x].temperature;
+                        massIn[ny][nx].sourceCount++;
                     }
                 }
             }
@@ -269,7 +286,8 @@ bool GasSim::update(float deltaTime) {
                     cell.temperature -= tempDrop;
                 }
                 
-                // DEBUG: Log temperature changes with timestamp
+                // DEBUG: Log temperature changes with timestamp (COMMENTED OUT - too spammy)
+                /*
                 static int tempDebugCount = 0;
                 static auto startTime = std::chrono::steady_clock::now();
                 if (tempDebugCount++ % 50 == 0) {
@@ -280,6 +298,7 @@ bool GasSim::update(float deltaTime) {
                               << "(sources: " << massIn[y][x].sourceCount 
                               << ", massIn: " << massIn[y][x].mass << "kg)" << std::endl;
                 }
+                */
             }
             // If no incoming mass, cell keeps whatever temperature it already has
             
@@ -325,17 +344,29 @@ bool GasSim::update(float deltaTime) {
                 
                 float cellMass = cell.mass;
                 
-                // SKIP FLOW if this cell just spread mass this tick
-                // Prevents gas from spreading outward then immediately merging back
-                if (massOut[y][x] > 0.0001f) continue;
+                // Skip flow for cells that just spread - they already moved mass
+                // BUT: In narrow tubes, we need to allow flow even after spread
+                // to prevent mass from getting "stuck" in spreading pattern
+                if (massOut[y][x] > 0.0001f) {
+                    // DEBUG: Track cells that skip flow
+                    static int skipFlowCount = 0;
+                    if (cellMass > 10.0f && skipFlowCount < 5) {
+                        std::cout << "[FLOW SKIP] Cell(" << x << "," << y << ") mass=" << cellMass 
+                                  << " massOut=" << massOut[y][x] << " - skipping flow" << std::endl;
+                        skipFlowCount++;
+                    }
+                    continue;
+                }
                 
-                // DEBUG: Log flow attempts for spawned gas
+                // DEBUG: Log flow attempts for spawned gas (COMMENTED OUT - too spammy)
+                /*
                 static int flowDebugCount = 0;
                 bool isSpawnedFlow = (cellMass >= 0.01f && cellMass <= 0.5f);  // Recently spawned gas
                 if (isSpawnedFlow && flowDebugCount < 10) {
                     std::cout << "[FLOW] Cell(" << x << "," << y << ") mass=" << cellMass << " checking directions..." << std::endl;
                     flowDebugCount++;
                 }
+                */
                 
                 // GAS FLOW: Scan ALL directions, prioritize VACUUM over merge
                 // This prevents gas from merging when it could flow into empty space
@@ -421,7 +452,7 @@ bool GasSim::update(float deltaTime) {
                 }
                 else if (isSameGas) {
                         // SAME GAS: Pressure-based merge decision
-                        float spaceAvailable = 2.0f - neighbor.mass;  // 2kg max per cell
+                        float spaceAvailable = 1.250f - neighbor.mass;  // 1.250kg (~2.7 lbs) max per cell
                         
                         if (spaceAvailable < 0.001f) {
                             // Neighbor is full, try next direction
@@ -473,7 +504,7 @@ bool GasSim::update(float deltaTime) {
             
             if (action.isMerge) {
                 // MERGE: Push mass into target, leftover stays
-                float spaceAvailable = 2.0f - toCell.mass;
+                float spaceAvailable = 1.250f - toCell.mass;  // 1.250kg (~2.7 lbs) max
                 float massToMerge = std::min(action.massToMove, spaceAvailable);
                 float leftover = action.massToMove - massToMerge;
                 
@@ -544,7 +575,7 @@ bool GasSim::update(float deltaTime) {
     }
     
     // Gas decay: time-based removal of microscopic gas cells
-    // Each cell gets a random decay time (60-120 seconds) when it drops below threshold
+    // CRITICAL FIX: Only decay isolated micro-cells, not active gas clouds
     static constexpr float MICRO_MASS_THRESHOLD = 0.001f;
     static constexpr float MIN_DECAY_TIME = 60.0f;   // Minimum 60 seconds
     static constexpr float MAX_DECAY_TIME = 120.0f;  // Maximum 120 seconds
@@ -562,6 +593,29 @@ bool GasSim::update(float deltaTime) {
             
             // Only decay microscopic gas cells
             if (cell.mass < MICRO_MASS_THRESHOLD) {
+                // CHECK: Is this cell isolated? (no gas neighbors)
+                bool hasGasNeighbor = false;
+                int neighbors[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+                
+                for (int i = 0; i < 4; i++) {
+                    int nx = x + neighbors[i][0];
+                    int ny = y + neighbors[i][1];
+                    
+                    if (grid->isValidPosition(nx, ny)) {
+                        const Cell& neighbor = grid->getCell(nx, ny);
+                        if (isGasType(neighbor.elementType) && neighbor.mass >= MICRO_MASS_THRESHOLD) {
+                            hasGasNeighbor = true;
+                            break;
+                        }
+                    }
+                }
+                
+                // SKIP decay if cell has a "healthy" gas neighbor (part of active cloud)
+                if (hasGasNeighbor) {
+                    cell.microMassDecayTime = 0.0f;  // Reset timer
+                    continue;
+                }
+                
                 // Initialize decay timer if not already set (negative = time remaining)
                 if (cell.microMassDecayTime >= 0.0f) {
                     // Generate random decay time between 60-120 seconds
@@ -597,6 +651,90 @@ bool GasSim::update(float deltaTime) {
                 cell.microMassDecayTime = 0.0f;
             }
         }
+    }
+    
+    // MASS AUDIT: Track total mass across ALL phases to detect conservation issues
+    static int auditTickCounter = 0;
+    static float lastTotalMass = 0.0f;
+    static int auditInterval = 100;  // Check every 100 ticks
+    static std::ofstream auditFile;  // File output for mass audit logs
+    
+    auditTickCounter++;
+    if (auditTickCounter >= auditInterval) {
+        auditTickCounter = 0;
+        
+        // Open file on first run
+        if (!auditFile.is_open()) {
+            auditFile.open("mass_audit.log", std::ios::out | std::ios::trunc);
+        }
+        
+        // Sum all mass in the grid by type
+        float totalGasMass = 0.0f;
+        int gasCellCount = 0;
+        float totalLiquidMass = 0.0f;
+        int liquidCellCount = 0;
+        float totalSolidMass = 0.0f;
+        int solidCellCount = 0;
+        
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                if (!grid->isValidPosition(x, y)) continue;
+                
+                const Cell& cell = grid->getCell(x, y);
+                const Element& props = ElementTypes::getElement(cell.elementType);
+                
+                if (props.isGas) {
+                    totalGasMass += cell.mass;
+                    gasCellCount++;
+                } else if (props.isLiquid) {
+                    totalLiquidMass += cell.mass;
+                    liquidCellCount++;
+                } else if (cell.elementType != ElementType::Vacuum && cell.elementType != ElementType::Empty) {
+                    totalSolidMass += cell.mass;
+                    solidCellCount++;
+                }
+            }
+        }
+        
+        float totalMass = totalGasMass + totalLiquidMass + totalSolidMass;
+        
+        // ALWAYS log to console for visibility
+        std::cout << "[MASS AUDIT] Gas: " << totalGasMass << "kg (" << gasCellCount 
+                  << ") | Liquid: " << totalLiquidMass << "kg (" << liquidCellCount
+                  << ") | Solid: " << totalSolidMass << "kg (" << solidCellCount
+                  << ") | TOTAL: " << totalMass << "kg";
+        
+        // Log to file and console if mass changed significantly (> 0.01kg difference)
+        if (lastTotalMass > 0.0f && std::abs(totalMass - lastTotalMass) > 0.01f) {
+            float massDiff = totalMass - lastTotalMass;
+            float percentChange = (massDiff / lastTotalMass) * 100.0f;
+            
+            std::cout << " | Change: " << massDiff << "kg (" << percentChange << "%)";
+            
+            // Write to file with timestamp
+            auto now = std::chrono::system_clock::now();
+            auto time_t = std::chrono::system_clock::to_time_t(now);
+            auditFile << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S")
+                     << " | Gas: " << totalGasMass << "kg | Liquid: " << totalLiquidMass << "kg"
+                     << " | Solid: " << totalSolidMass << "kg | TOTAL: " << totalMass << "kg"
+                     << " | Change: " << massDiff << "kg (" << percentChange << "%)" << std::endl;
+        } else if (lastTotalMass == 0.0f && totalMass > 0.0f) {
+            // Initial measurement
+            std::cout << " | INITIAL";
+            auditFile << "[INITIAL] Gas: " << totalGasMass << "kg | Liquid: " << totalLiquidMass 
+                     << "kg | Solid: " << totalSolidMass << "kg | TOTAL: " << totalMass << "kg" << std::endl;
+        }
+        
+        std::cout << std::endl;
+        
+        // Always log to file for tracking
+        if (totalMass > 0.0f) {
+            auditFile << std::fixed << std::setprecision(3) 
+                     << "Gas: " << totalGasMass << "kg | Liquid: " << totalLiquidMass 
+                     << "kg | Solid: " << totalSolidMass << "kg | TOTAL: " << totalMass << "kg" << std::endl;
+        }
+        
+        lastTotalMass = totalMass;
     }
     
     return true;

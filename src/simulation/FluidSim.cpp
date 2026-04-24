@@ -50,11 +50,11 @@ bool FluidSim::update(float deltaTime) {
             float cellMass = cell.mass;
             const Element& props = ElementTypes::getElement(cell.elementType);
             
-            // VISCOSITY-BASED FLOW RATE
-            // Low viscosity (water=1.0) = fast flow, High viscosity (honey=100) = slow flow
-            // Flow rate = portion of mass that can move this tick
+            // VISCOSITY-BASED FLOW RATE (only applies to MERGE operations)
+            // Low viscosity (water=1.0) = fast merge, High viscosity (honey=100) = slow merge
+            // Flow rate = portion of mass that can MERGE per tick
             float flowRate = 1.0f / (1.0f + props.viscosity * 0.1f);  // 0.0 to 1.0
-            float massToFlow = cellMass * flowRate;
+            float massToMerge = cellMass * flowRate;  // Only for merge operations
             
             // ALL liquid cells flow regardless of mass - no minimum threshold
             
@@ -85,8 +85,11 @@ bool FluidSim::update(float deltaTime) {
             }
             
             // Try each direction in priority order
-            float remainingMass = massToFlow;
-            for (int i = 0; i < dirCount && remainingMass > 0.001f; i++) {
+            // CRITICAL FIX: Track how much mass we've actually moved
+            float massMoved = 0.0f;
+            float remainingMergeMass = massToMerge;  // Only limits merge operations
+            
+            for (int i = 0; i < dirCount && (remainingMergeMass > 0.001f || massMoved == 0.0f); i++) {
                 int nx = x + directions[i][0];
                 int ny = y + directions[i][1];
                 
@@ -109,23 +112,25 @@ bool FluidSim::update(float deltaTime) {
                 action.isMerge = false;
                 
                 if (isVacuum) {
-                    // VACUUM: Move mass into vacuum
-                    action.massToMove = remainingMass;
+                    // VACUUM: Move entire cell into vacuum
+                    // CRITICAL FIX: Move ALL mass, not partial
+                    action.massToMove = cellMass;  // Move entire mass
                     action.isMerge = false;  // Will swap/move
                     flowActions.push_back(action);
-                    remainingMass = 0.0f;
-                    break;
+                    massMoved = cellMass;
+                    break;  // Cell fully moved, stop processing
                 }
                 else if (isSameLiquid) {
                     // SAME LIQUID: Merge based on viscosity
                     float spaceAvailable = 2.0f - neighbor.mass;  // 2kg max
-                    float mergeAmount = std::min(remainingMass, spaceAvailable);
+                    float mergeAmount = std::min(remainingMergeMass, spaceAvailable);
                     
                     if (mergeAmount >= 0.001f) {
                         action.massToMove = mergeAmount;
                         action.isMerge = true;
                         flowActions.push_back(action);
-                        remainingMass -= mergeAmount;
+                        remainingMergeMass -= mergeAmount;
+                        massMoved += mergeAmount;
                         // Don't break - can split mass to multiple neighbors
                     }
                 }
@@ -136,42 +141,87 @@ bool FluidSim::update(float deltaTime) {
                     
                     // Denser liquid sinks through lighter liquid
                     if (cellProps.density > neighborProps.density) {
-                        action.massToMove = remainingMass;
+                        // CRITICAL FIX: Swap entire mass
+                        action.massToMove = cellMass;  // Swap all mass
                         action.isMerge = false;  // Swap
                         flowActions.push_back(action);
-                        remainingMass = 0.0f;
+                        massMoved = cellMass;
                         break;
                     }
                 }
                 else if (isDisplaceableGas) {
                     // GAS: Displace it (liquids are denser)
-                    action.massToMove = remainingMass;
+                    // CRITICAL FIX: Move entire mass when displacing gas
+                    action.massToMove = cellMass;  // Move all mass
                     action.isMerge = false;  // Swap
                     flowActions.push_back(action);
-                    remainingMass = 0.0f;
+                    massMoved = cellMass;
                     break;
                 }
+            }
+            
+            // CRITICAL FIX: Handle leftover mass
+            // If cell moved >99% of mass, convert remainder to vacuum to prevent micro-cells
+            float massRemaining = cellMass - massMoved;
+            if (massMoved > 0.0f && massRemaining > 0.0f && massRemaining < cellMass * 0.01f) {
+                // Cell moved almost all mass (>99%), convert leftover to vacuum
+                FlowAction cleanupAction;
+                cleanupAction.fromX = x;
+                cleanupAction.fromY = y;
+                cleanupAction.toX = x;  // Same cell - just mark for cleanup
+                cleanupAction.toY = y;
+                cleanupAction.massToMove = massRemaining;
+                cleanupAction.isMerge = false;
+                cleanupAction.type = ElementType::Vacuum;  // Special marker
+                cleanupAction.temperature = -273.15f;
+                flowActions.push_back(cleanupAction);
             }
         }
     }
     
     // Apply all flow actions simultaneously
     for (const auto& action : flowActions) {
+        // CRITICAL FIX: Handle cleanup actions (leftover mass -> vacuum)
+        if (action.fromX == action.toX && action.fromY == action.toY && action.type == ElementType::Vacuum) {
+            // This is a cleanup action - convert cell to vacuum
+            Cell& cell = grid->getCell(action.fromX, action.fromY);
+            cell.elementType = ElementType::Vacuum;
+            cell.mass = 0.0f;
+            cell.temperature = -273.15f;
+            cell.velocityX = 0.0f;
+            cell.velocityY = 0.0f;
+            cell.updated = false;
+            cell.targetElementType = ElementType::Empty;
+            cell.phaseTransitionProgress = 0.0f;
+            cell.phaseTransitionSpeed = 0.0f;
+            cell.microMassDecayTime = 0.0f;
+            cell.color = sf::Color(10, 10, 15);
+            continue;
+        }
+        
         Cell& fromCell = grid->getCell(action.fromX, action.fromY);
         Cell& toCell = grid->getCell(action.toX, action.toY);
         
         if (action.isMerge) {
-            // MERGE: Add mass to target
-            float totalMass = toCell.mass + action.massToMove;
-            float newTemp = (toCell.mass * toCell.temperature + action.massToMove * action.temperature) / totalMass;
+            // MERGE: Add mass to target (WITH CAP CHECK to prevent overflow)
+            float spaceAvailable = 2.0f - toCell.mass;  // 2kg max per cell
+            float actualMergeAmount = std::min(action.massToMove, spaceAvailable);
+            
+            // If no space, skip this merge (mass stays in source)
+            if (actualMergeAmount < 0.001f) {
+                continue;
+            }
+            
+            float totalMass = toCell.mass + actualMergeAmount;
+            float newTemp = (toCell.mass * toCell.temperature + actualMergeAmount * action.temperature) / totalMass;
             
             toCell.mass = totalMass;
             toCell.temperature = newTemp;
             toCell.updated = true;
             toCell.updateColor();
             
-            // Remove mass from source
-            fromCell.mass -= action.massToMove;
+            // Remove ONLY the actual merged amount from source
+            fromCell.mass -= actualMergeAmount;
             if (fromCell.mass < 0.001f) {
                 // Source became micro-cell - convert to vacuum
                 fromCell.elementType = ElementType::Vacuum;
