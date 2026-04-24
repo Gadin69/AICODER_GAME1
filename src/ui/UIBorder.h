@@ -33,6 +33,9 @@ public:
     void handleMouseRelease();
     void handleMouseMove(const sf::Vector2f& mousePos);
     
+    // Mouse through mode - if true, border doesn't block mouse events (for overlays)
+    bool mouseThrough = false;
+    
     // Getters for mouse collision detection
     sf::Vector2f getPosition() const;
     sf::Vector2f getSize() const;

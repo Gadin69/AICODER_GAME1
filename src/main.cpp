@@ -18,6 +18,9 @@
 #define DEBUG_MODE false  // Set to true to enable debug console output
 #define DEVELOPER_MODE true  // Set to true to enable admin/dev tools (sliders, overlays, etc.)
 
+// Global debug print toggle (can be controlled via console)
+bool g_debugPrintsEnabled = false;
+
 // Global variables for demo
 Renderer renderer;
 TileMap tileMap;
@@ -198,6 +201,24 @@ void initializeFonts() {
         font
     );
     std::cout << "[INIT] GameConsole initialized" << std::endl;
+    
+    // Register console commands
+    gameConsole->registerCommand("debug", [](const std::vector<std::string>& args) {
+        extern bool g_debugPrintsEnabled;
+        if (args.empty()) {
+            // Toggle
+            g_debugPrintsEnabled = !g_debugPrintsEnabled;
+            std::cout << "[CONSOLE] Debug prints " << (g_debugPrintsEnabled ? "ENABLED" : "DISABLED") << std::endl;
+        } else if (args[0] == "on" || args[0] == "1" || args[0] == "true") {
+            g_debugPrintsEnabled = true;
+            std::cout << "[CONSOLE] Debug prints ENABLED" << std::endl;
+        } else if (args[0] == "off" || args[0] == "0" || args[0] == "false") {
+            g_debugPrintsEnabled = false;
+            std::cout << "[CONSOLE] Debug prints DISABLED" << std::endl;
+        } else {
+            std::cout << "[CONSOLE] Usage: debug [on|off|toggle]" << std::endl;
+        }
+    }, "Toggle debug terminal prints (usage: debug [on|off|toggle])");
     
     // Initialize developer tools (only in DEVELOPER_MODE)
 #if DEVELOPER_MODE

@@ -190,6 +190,9 @@ void UIBorder::updateChildPositions() {
 }
 
 void UIBorder::handleMousePress(const sf::Vector2f& mousePos) {
+    // If mouseThrough is enabled, don't process mouse events (for overlays)
+    if (mouseThrough) return;
+    
     // Propagate mouse press to all UIElement children
     for (auto& child : uiElementChildren) {
         if (child.element->isVisible()) {
@@ -199,6 +202,9 @@ void UIBorder::handleMousePress(const sf::Vector2f& mousePos) {
 }
 
 void UIBorder::handleMouseRelease() {
+    // If mouseThrough is enabled, don't process mouse events (for overlays)
+    if (mouseThrough) return;
+    
     // Propagate mouse release to all UIElement children
     for (auto& child : uiElementChildren) {
         if (child.element->isVisible()) {
@@ -208,6 +214,9 @@ void UIBorder::handleMouseRelease() {
 }
 
 void UIBorder::handleMouseMove(const sf::Vector2f& mousePos) {
+    // If mouseThrough is enabled, don't process mouse events (for overlays)
+    if (mouseThrough) return;
+    
     // Propagate mouse move to all UIElement children
     for (auto& child : uiElementChildren) {
         if (child.element->isVisible()) {

@@ -33,6 +33,9 @@ public:
     void setVisible(bool vis) { visible = vis; }
     bool isInitialized() const { return initialized; }
     
+    // Mouse through mode - if true, element doesn't block mouse events (for overlays)
+    bool mouseThrough = false;
+    
     // Hit testing
     virtual bool containsPoint(const sf::Vector2f& point) const;
     

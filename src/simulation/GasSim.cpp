@@ -7,6 +7,14 @@
 #include <iomanip>
 #include <chrono>
 
+// Debug print helper macro
+#define DEBUG_PRINT(msg) do { \
+    extern bool g_debugPrintsEnabled; \
+    if (g_debugPrintsEnabled) { \
+        std::cout << msg << std::endl; \
+    } \
+} while(0)
+
 GasSim::GasSim() 
     : SimulationSystem("GasSim", 0.04f) {  // Update every 40ms (faster spreading for visible movement)
 }
@@ -44,6 +52,8 @@ bool GasSim::update(float deltaTime) {
     // Step 2: Calculate gas movements in separate buffers
     // Step 3: Apply all changes simultaneously
     
+    // ========== OLD EXPANSION SYSTEM - DISABLED (replaced by new STEP 4 flow algorithm below) ==========
+    #if 0
     // STEP 1: Snapshot current gas state
     struct GasCellData {
         ElementType type = ElementType::Vacuum;
@@ -316,6 +326,7 @@ bool GasSim::update(float deltaTime) {
             calculatePressure(x, y);
         }
     }
+    #endif  // END OF OLD EXPANSION SYSTEM - DISABLED
     
     // STEP 4: GAS FLOW - Move/swap gas cells based on buoyancy and density
     // This happens AFTER expansion to give gas continuous movement
@@ -335,9 +346,10 @@ bool GasSim::update(float deltaTime) {
         std::vector<FlowAction> flowActions;
         flowActions.reserve(width * height / 4);  // Reserve space for efficiency
         
-        // Track which cells are already involved in merges to prevent conflicts
+        // Track which cells are already involved in merges or swaps to prevent conflicts
         std::vector<std::vector<bool>> isMergeSource(height, std::vector<bool>(width, false));
         std::vector<std::vector<bool>> isMergeTarget(height, std::vector<bool>(width, false));
+        std::vector<std::vector<bool>> isSwapInvolved(height, std::vector<bool>(width, false));  // NEW: Track swaps
         
         // Random seed for direction choice
         static unsigned int flowRandomSeed = 42;
@@ -368,24 +380,82 @@ bool GasSim::update(float deltaTime) {
                 
                 // ============ STEP 1: MOVE upward - SWAP into vacuum ============
                 bool movedUpward = false;
-                for (int i = 0; i < upDirCount; i++) {
-                    int nx = x + upDirections[i][0];
-                    int ny = y + upDirections[i][1];
+                
+                // Small chance to try sideways movement instead of upward (natural spreading)
+                static unsigned int lateralMoveSeed = 77777;
+                lateralMoveSeed = lateralMoveSeed * 1103515245 + 12345;
+                int lateralRoll = (lateralMoveSeed / 65536) % 100;
+                bool tryLateralMove = (lateralRoll < 15);  // 15% chance to try sideways
+                
+                if (tryLateralMove) {
+                    // Try to move LEFT or RIGHT into vacuum
+                    int sideDirections[2][2] = {{-1, 0}, {1, 0}};
+                    int chosenSide = (simpleRand() % 2);  // Random: 0=left, 1=right
                     
-                    if (!grid->isValidPosition(nx, ny)) continue;
+                    int nx = x + sideDirections[chosenSide][0];
+                    int ny = y + sideDirections[chosenSide][1];
                     
-                    Cell& neighbor = grid->getCell(nx, ny);
-                    if (neighbor.elementType == ElementType::Vacuum) {
-                        FlowAction action;
-                        action.fromX = x; action.fromY = y;
-                        action.toX = nx; action.toY = ny;
-                        action.massToMove = cellMass;
-                        action.temperature = cell.temperature;
-                        action.type = cell.elementType;
-                        action.isMerge = false;  // SWAP
-                        flowActions.push_back(action);
-                        movedUpward = true;
-                        break;  // Done with this cell
+                    if (grid->isValidPosition(nx, ny)) {
+                        Cell& neighbor = grid->getCell(nx, ny);
+                        if (neighbor.elementType == ElementType::Vacuum) {
+                            // Check if either cell is already involved in an action
+                            if (isSwapInvolved[y][x] || isSwapInvolved[ny][nx] ||
+                                isMergeSource[y][x] || isMergeTarget[y][x] ||
+                                isMergeSource[ny][nx] || isMergeTarget[ny][nx]) {
+                                continue;  // Skip, already reserved
+                            }
+                            
+                            FlowAction action;
+                            action.fromX = x; action.fromY = y;
+                            action.toX = nx; action.toY = ny;
+                            action.massToMove = cellMass;
+                            action.temperature = cell.temperature;
+                            action.type = cell.elementType;
+                            action.isMerge = false;  // SWAP
+                            flowActions.push_back(action);
+                            
+                            // Mark as reserved
+                            isSwapInvolved[y][x] = true;
+                            isSwapInvolved[ny][nx] = true;
+                            
+                            movedUpward = true;  // Treat as moved (skip rest of steps)
+                        }
+                    }
+                }
+                
+                // If didn't move sideways, try upward movement
+                if (!movedUpward) {
+                    for (int i = 0; i < upDirCount; i++) {
+                        int nx = x + upDirections[i][0];
+                        int ny = y + upDirections[i][1];
+                        
+                        if (!grid->isValidPosition(nx, ny)) continue;
+                        
+                        Cell& neighbor = grid->getCell(nx, ny);
+                        if (neighbor.elementType == ElementType::Vacuum) {
+                            // Check if either cell is already involved in an action
+                            if (isSwapInvolved[y][x] || isSwapInvolved[ny][nx] ||
+                                isMergeSource[y][x] || isMergeTarget[y][x] ||
+                                isMergeSource[ny][nx] || isMergeTarget[ny][nx]) {
+                                continue;  // Skip, already reserved
+                            }
+                            
+                            FlowAction action;
+                            action.fromX = x; action.fromY = y;
+                            action.toX = nx; action.toY = ny;
+                            action.massToMove = cellMass;
+                            action.temperature = cell.temperature;
+                            action.type = cell.elementType;
+                            action.isMerge = false;  // SWAP
+                            flowActions.push_back(action);
+                            
+                            // Mark as reserved
+                            isSwapInvolved[y][x] = true;
+                            isSwapInvolved[ny][nx] = true;
+                            
+                            movedUpward = true;
+                            break;  // Done with this cell
+                        }
                     }
                 }
                 
@@ -548,6 +618,13 @@ bool GasSim::update(float deltaTime) {
                 int nx = x + sideDirections[chosenDir][0];
                 int ny = y + sideDirections[chosenDir][1];
                 
+                // Check if either cell is already involved in an action
+                if (isSwapInvolved[y][x] || isSwapInvolved[ny][nx] ||
+                    isMergeSource[y][x] || isMergeTarget[y][x] ||
+                    isMergeSource[ny][nx] || isMergeTarget[ny][nx]) {
+                    continue;  // Skip, already reserved
+                }
+                
                 FlowAction action;
                 action.fromX = x; action.fromY = y;
                 action.toX = nx; action.toY = ny;
@@ -556,6 +633,10 @@ bool GasSim::update(float deltaTime) {
                 action.type = cell.elementType;
                 action.isMerge = false;  // SWAP
                 flowActions.push_back(action);
+                
+                // Mark as reserved
+                isSwapInvolved[y][x] = true;
+                isSwapInvolved[ny][nx] = true;
             }
         }
         
@@ -567,9 +648,9 @@ bool GasSim::update(float deltaTime) {
             
             // DEBUG: Log first few flow applications
             if (applyDebugCount < 10) {
-                std::cout << "[APPLY FLOW] " << (action.isMerge ? "MERGE" : "SWAP") 
-                          << " (" << action.fromX << "," << action.fromY << ")->(" 
-                          << action.toX << "," << action.toY << ") mass=" << action.massToMove << std::endl;
+                DEBUG_PRINT("[APPLY FLOW] " << (action.isMerge ? "MERGE" : "SWAP") 
+                              << " (" << action.fromX << "," << action.fromY << ")->(" 
+                              << action.toX << "," << action.toY << ") mass=" << action.massToMove);
                 applyDebugCount++;
             }
             
@@ -578,6 +659,12 @@ bool GasSim::update(float deltaTime) {
                 float spaceAvailable = MAX_GAS_MASS - toCell.mass;
                 float massToMerge = std::min(action.massToMove, spaceAvailable);
                 float leftover = action.massToMove - massToMerge;
+                
+                // DEBUG: Log merge details for tracking
+                DEBUG_PRINT("[MERGE APPLY] (" << action.fromX << "," << action.fromY << ")->(" 
+                          << action.toX << "," << action.toY << ") mass=" << action.massToMove 
+                          << " targetMass=" << toCell.mass << " space=" << spaceAvailable 
+                          << " merging=" << massToMerge << " leftover=" << leftover);
                 
                 // Mass-weighted temperature average
                 float totalMass = toCell.mass + massToMerge;
@@ -591,6 +678,11 @@ bool GasSim::update(float deltaTime) {
                 
                 // Handle leftover in source cell
                 if (leftover < 0.00001f) {
+                    // DEBUG: Track when high-mass cells are converted to vacuum
+                    DEBUG_PRINT("[VACUUM CONVERT] Cell (" << action.fromX << "," << action.fromY 
+                              << ") converted to vacuum, original mass=" << action.massToMove 
+                              << " leftover=" << leftover);
+                    
                     // Cell is EMPTY - convert to vacuum with proper cleared data
                     fromCell.elementType = ElementType::Vacuum;
                     fromCell.mass = 0.0f;
