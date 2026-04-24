@@ -17,6 +17,7 @@ public:
     void render(Renderer& renderer);
     
     void handleToggle();  // Call when ` key is pressed
+    void handleToggleKeyReleased();  // Call to clear any pending ` character
     void handleMousePress(const sf::Vector2f& mousePos);
     void handleKeyPress(const sf::Event::KeyPressed& keyEvent);
     void handleTextEntered(const sf::Event::TextEntered& textEvent);

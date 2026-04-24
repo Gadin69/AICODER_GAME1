@@ -46,6 +46,10 @@ void GameConsole::initialize(float x, float y, float width, float height, const 
         addOutput("Mass audit logs are in mass_audit.log file", sf::Color(200, 200, 100));
     }, "Show mass conservation info");
     
+    registerCommand("adminmode", [this](const std::vector<std::string>& args) {
+        addOutput("Admin mode command - implementation pending", sf::Color(200, 200, 100));
+    }, "Toggle admin/developer mode (implementation pending)");
+    
     initialized = true;
 }
 

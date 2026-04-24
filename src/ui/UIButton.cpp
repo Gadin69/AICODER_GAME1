@@ -9,7 +9,10 @@ UIButton::~UIButton() {
 }
 
 void UIButton::initialize(float x, float y, float width, float height, const std::string& text, const sf::Font& font) {
-    fontPtr = const_cast<sf::Font*>(&font);
+    // Set base class properties
+    position = sf::Vector2f(x, y);
+    size = sf::Vector2f(width, height);
+    fontPtr = &font;
     
     // Background
     background.setSize(sf::Vector2f(width, height));
@@ -41,7 +44,7 @@ void UIButton::render(Renderer& renderer) {
 void UIButton::handleMousePress(const sf::Vector2f& mousePos) {
     if (!initialized) return;
     
-    if (background.getGlobalBounds().contains(mousePos)) {
+    if (containsPoint(mousePos)) {
         isPressed = true;
         updateColor();
     }
@@ -51,7 +54,7 @@ void UIButton::handleMouseMove(const sf::Vector2f& mousePos) {
     if (!initialized) return;
     
     bool wasHovered = isHovered;
-    isHovered = background.getGlobalBounds().contains(mousePos);
+    isHovered = containsPoint(mousePos);
     
     if (isHovered != wasHovered) {
         updateColor();

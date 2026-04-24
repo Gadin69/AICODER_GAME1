@@ -1,0 +1,71 @@
+# Liquid Mass Conservation Debug Log
+# ====================================
+
+## Problem
+- Water loses mass when flowing freely (not confined)
+- Water maintains mass perfectly when confined in bucket
+- Indicates bug in liquid flow logic, not phase change
+
+## Test Cases
+1. **Bucket Test (PASS)**: 1000kg water in stone bucket → stable at 1000kg ✓
+2. **Free Flow Test (FAIL)**: Water flowing freely → loses mass each tick ✗
+
+## Investigation Steps
+
+### Step 1: Check liquid flow creation logic
+- File: FluidSim.cpp, lines 43-155
+- Looking for: Mass calculation errors when creating flow actions
+
+### Step 2: Check liquid flow apply logic  
+- File: FluidSim.cpp, lines 158-250
+- Looking for: Mass not being transferred correctly during apply
+
+### Step 3: Check micro-cell handling
+- File: FluidSim.cpp, line 175
+- Looking for: Cells converted to vacuum prematurely
+
+### Step 4: Compare old vs new merge logic
+- OLD: No cap check on merge (fixed in previous commit)
+- NEW: Cap check added to prevent overflow
+
+## Hypothesis
+When liquid flows, the viscosity-based flow rate (line 56-57) calculates
+massToFlow, but the REMAINING mass (cellMass - massToFlow) might not be
+handled correctly when the flow action applies.
+
+## Fix Applied
+
+### Root Cause
+When liquid flowed into vacuum or swapped with other liquids/gas, the code used
+`remainingMass` (which was limited by viscosity) instead of `cellMass` (full mass).
+This caused mass loss because:
+- Cell has 100kg water
+- Viscosity allows 90.9kg to flow (`massToFlow`)
+- Cell flows 90.9kg into vacuum
+- Source cell becomes vacuum with 0kg
+- **9.1kg is LOST!**
+
+### Solution
+1. **Separated merge and swap logic**:
+   - `massToMerge` = viscosity-limited mass (for merge operations only)
+   - `cellMass` = full cell mass (for swap/move operations)
+
+2. **Track mass moved**:
+   - Added `massMoved` variable to track how much mass actually left the cell
+   - Swap operations (vacuum, different liquid, gas) move ALL mass
+   - Merge operations (same liquid) move viscosity-limited mass
+
+3. **Handle leftover mass**:
+   - If cell moved >99% of mass, convert remainder to vacuum
+   - Prevents micro-cells from accumulating
+   - Creates cleanup action to zero out the cell
+
+### Code Changes
+- FluidSim.cpp lines 50-57: Renamed `massToFlow` → `massToMerge`
+- FluidSim.cpp lines 88-91: Added `massMoved` tracking
+- FluidSim.cpp lines 113-160: Updated all flow operations to use correct mass
+- FluidSim.cpp lines 163-180: Added leftover mass cleanup logic
+- FluidSim.cpp lines 183-200: Added cleanup action handler in apply step
+
+## Test Results
+[PENDING - User needs to test with free-flowing water]

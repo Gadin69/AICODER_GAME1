@@ -51,6 +51,9 @@ set(SOURCES
     src/ui/UITooltip.cpp
     src/ui/UINumberInput.cpp
     src/ui/GameConsole.cpp
+    src/ui/UIBorder.cpp
+    src/ui/UIElement.cpp
+    src/ui/GameGUI.cpp
 )
 
 # Header files
@@ -101,6 +104,9 @@ set(HEADERS
     src/ui/UITooltip.h
     src/ui/UINumberInput.h
     src/ui/GameConsole.h
+    src/ui/UIBorder.h
+    src/ui/UIElement.h
+    src/ui/GameGUI.h
 )
 
 # Create executable

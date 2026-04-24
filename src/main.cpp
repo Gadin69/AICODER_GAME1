@@ -10,6 +10,7 @@
 #include "ui/SettingsMenu.h"
 #include "ui/PauseMenu.h"
 #include "ui/GameConsole.h"
+#include "ui/GameGUI.h"
 #include "ecs/Entity.h"
 #include "ui/UISlider.h"
 #include <SFML/Graphics.hpp>
@@ -43,8 +44,8 @@ sf::Text* infoText = nullptr;
 bool isLeftMouseHeld = false;
 bool isRightMouseHeld = false;
 
-// UI Slider for simulation speed
-UISlider* simSpeedSlider = nullptr;
+// UI Slider for simulation speed (managed by GameGUI now)
+GameGUI* gameGUI = nullptr;
 float previousSimSpeed = 1.0f;  // Stores speed before spacebar pause
 bool isSpeedPaused = false;     // Tracks if spacebar pause is active
 bool isAdminMode = DEVELOPER_MODE;  // Auto-enabled if DEVELOPER_MODE is true
@@ -181,11 +182,10 @@ void initializeFonts() {
     
     // Initialize simulation speed slider (available to all players)
     // Position at bottom-left of screen (will be updated dynamically during render)
-    std::cout << "[INIT] Creating simSpeedSlider..." << std::endl;
-    simSpeedSlider = new UISlider();
-    std::cout << "[INIT] simSpeedSlider created, pointer: " << simSpeedSlider << std::endl;
-    simSpeedSlider->initialize(10, 10, 300, 0.1f, 5.0f, 1.0f, "Sim Speed:", font);
-    std::cout << "[INIT] simSpeedSlider initialized" << std::endl;
+    std::cout << "[INIT] Creating gameGUI..." << std::endl;
+    gameGUI = new GameGUI();
+    gameGUI->initialize(font);
+    std::cout << "[INIT] gameGUI initialized" << std::endl;
     
     // Initialize in-game console
     sf::Vector2u windowSize = renderer.getRenderWindow().getSize();
@@ -263,6 +263,20 @@ void handleMouseInput(const sf::Event& event) {
         }
         // Don't process game mouse input when console is open
         return;
+    }
+    
+    // Block mouse input when over GameGUI elements (skillbar, etc.)
+    if (gameGUI && (gameState == GameState::Playing || gameState == GameState::Paused)) {
+        if (event.is<sf::Event::MouseButtonPressed>()) {
+            auto mouseButton = event.getIf<sf::Event::MouseButtonPressed>();
+            if (mouseButton) {
+                sf::Vector2f mousePos(mouseButton->position.x, mouseButton->position.y);
+                if (gameGUI->isMouseOverUI(mousePos)) {
+                    // Mouse is over UI border - block game input
+                    return;
+                }
+            }
+        }
     }
     
     if (event.is<sf::Event::MouseButtonPressed>()) {
@@ -578,8 +592,8 @@ void updateElementInspector() {
 void updateSimulation(float deltaTime) {
     // Apply simulation speed multiplier from slider
     float simSpeed = 1.0f;
-    if (simSpeedSlider) {
-        simSpeed = simSpeedSlider->currentValue;
+    if (gameGUI && gameGUI->getSimSpeedSlider()) {
+        simSpeed = gameGUI->getSimSpeedSlider()->currentValue;
     }
     
     float simDeltaTime = deltaTime * simSpeed;
@@ -640,24 +654,15 @@ void renderDemo() {
         renderer.getCamera().applyTo(renderer.getRenderWindow());
     }
     
-    // Render simulation speed slider (always visible during gameplay)
-    if (simSpeedSlider && (gameState == GameState::Playing || gameState == GameState::Paused)) {
-        // Update slider position to bottom of screen dynamically
-        sf::Vector2u windowSize = renderer.getRenderWindow().getSize();
-        float sliderY = static_cast<float>(windowSize.y) - 50.0f;  // 50px from bottom
-        
-        simSpeedSlider->track.setPosition(sf::Vector2f(10.0f, sliderY));
-        simSpeedSlider->updateThumbPosition();
-        simSpeedSlider->label->setPosition(sf::Vector2f(10.0f, sliderY - 25.0f));
-        simSpeedSlider->valueText->setPosition(sf::Vector2f(320.0f, sliderY - 2.0f));
-        
+    // Render game GUI (skillbar with time slider)
+    if (gameGUI && (gameState == GameState::Playing || gameState == GameState::Paused)) {
         // Reset view to screen coordinates for UI overlay
         sf::View defaultView = renderer.getRenderWindow().getDefaultView();
         renderer.getRenderWindow().setView(defaultView);
         
-        simSpeedSlider->render(renderer);
+        gameGUI->render(renderer);
         
-        // Don't restore camera view - slider should be on top, endFrame will display it
+        // Don't restore camera view - UI should be on top, endFrame will display it
     } else {
         // Ensure camera view is set for game rendering if no UI overlay
         renderer.getCamera().applyTo(renderer.getRenderWindow());
@@ -731,9 +736,13 @@ int main() {
         
         // Initialize menus
         try {
+            std::cout << "[INIT] Initializing mainMenu..." << std::endl;
             mainMenu.initialize(renderer.getRenderWindow());
+            std::cout << "[INIT] Initializing settingsMenu..." << std::endl;
             settingsMenu.initialize(renderer.getRenderWindow());
+            std::cout << "[INIT] Initializing pauseMenu..." << std::endl;
             pauseMenu.initialize(renderer.getRenderWindow());
+            std::cout << "[INIT] All menus initialized successfully" << std::endl;
             
             if (!mainMenu.isInitialized() || !settingsMenu.isInitialized() || !pauseMenu.isInitialized()) {
                 std::cerr << "WARNING: Menu system failed to initialize, skipping to game" << std::endl;
@@ -911,36 +920,37 @@ int main() {
                         break;
                     case sf::Keyboard::Scancode::Space:
                         // Toggle simulation speed pause
-                        if (simSpeedSlider) {
+                        if (gameGUI && gameGUI->getSimSpeedSlider()) {
+                            UISlider* slider = gameGUI->getSimSpeedSlider();
                             if (!isSpeedPaused) {
                                 // Store current speed and set to zero
-                                previousSimSpeed = simSpeedSlider->currentValue;
-                                simSpeedSlider->currentValue = 0.0f;
+                                previousSimSpeed = slider->currentValue;
+                                slider->currentValue = 0.0f;
                                 isSpeedPaused = true;
                             } else {
                                 // Restore previous speed
-                                simSpeedSlider->currentValue = previousSimSpeed;
+                                slider->currentValue = previousSimSpeed;
                                 isSpeedPaused = false;
                             }
-                            simSpeedSlider->updateThumbPosition();
-                            simSpeedSlider->updateValueText();
+                            slider->updateThumbPosition();
+                            slider->updateValueText();
                         }
                         break;
                         }
                     }
                 }
                 
-                // Handle simulation speed slider input (always active)
-                if (simSpeedSlider) {
+                // Handle game GUI input (skillbar slider)
+                if (gameGUI) {
                     if (event.is<sf::Event::MouseButtonPressed>()) {
                         sf::Vector2i mousePos = sf::Mouse::getPosition(renderer.getRenderWindow());
-                        simSpeedSlider->handleMousePress(sf::Vector2f(mousePos.x, mousePos.y));
+                        gameGUI->handleMousePress(sf::Vector2f(mousePos.x, mousePos.y));
                     } else if (event.is<sf::Event::MouseButtonReleased>()) {
-                        simSpeedSlider->handleMouseRelease();
+                        gameGUI->handleMouseRelease();
                     } else if (event.is<sf::Event::MouseMoved>()) {
                         auto mouseMove = event.getIf<sf::Event::MouseMoved>();
                         if (mouseMove) {
-                            simSpeedSlider->handleMouseMove(sf::Vector2f(mouseMove->position.x, mouseMove->position.y));
+                            gameGUI->handleMouseMove(sf::Vector2f(mouseMove->position.x, mouseMove->position.y));
                         }
                     }
                 }
@@ -948,15 +958,16 @@ int main() {
                 // Handle +/- hotkeys for simulation speed
                 if (event.is<sf::Event::KeyPressed>()) {
                     auto keyEvent = event.getIf<sf::Event::KeyPressed>();
-                    if (keyEvent && simSpeedSlider) {
+                    if (keyEvent && gameGUI && gameGUI->getSimSpeedSlider()) {
+                        UISlider* slider = gameGUI->getSimSpeedSlider();
                         if (keyEvent->scancode == sf::Keyboard::Scancode::Equal) {
-                            simSpeedSlider->currentValue = std::min(5.0f, simSpeedSlider->currentValue + 0.1f);
-                            simSpeedSlider->updateThumbPosition();
-                            simSpeedSlider->updateValueText();
+                            slider->currentValue = std::min(5.0f, slider->currentValue + 0.1f);
+                            slider->updateThumbPosition();
+                            slider->updateValueText();
                         } else if (keyEvent->scancode == sf::Keyboard::Scancode::Hyphen) {
-                            simSpeedSlider->currentValue = std::max(0.1f, simSpeedSlider->currentValue - 0.1f);
-                            simSpeedSlider->updateThumbPosition();
-                            simSpeedSlider->updateValueText();
+                            slider->currentValue = std::max(0.1f, slider->currentValue - 0.1f);
+                            slider->updateThumbPosition();
+                            slider->updateValueText();
                         }
                     }
                 }

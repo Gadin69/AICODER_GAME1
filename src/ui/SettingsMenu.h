@@ -9,6 +9,7 @@
 #include "UIToggle.h"
 #include "UIDropdown.h"
 #include "UINumberInput.h"
+#include "UIBorder.h"
 #include "MainMenu.h"  // For MenuAction enum
 #include <SFML/Graphics.hpp>
 #include <vector>
@@ -34,11 +35,21 @@ private:
     sf::RenderWindow* window = nullptr;
     
     // UI Components
+    UIBorder displayBorder;  // Display mode + resolution dropdowns
     UIDropdown displayDropdown;
     UIDropdown resolutionDropdown;
+    
+    UIBorder gridBorder;  // Grid size inputs
     UIToggle vsyncToggle;
     UINumberInput gridWidthInput;
     UINumberInput gridHeightInput;
+    
+    UIBorder cameraBorder;  // Camera control sliders
+    UISlider cameraSpeedSlider;
+    UISlider cameraAccelSlider;
+    UISlider cameraMaxSpeedSlider;
+    
+    UIBorder actionBorder;  // Apply/Back buttons
     UIButton applyButton;
     UIButton backButton;
     
@@ -54,10 +65,5 @@ private:
     
     sf::Vector2f mousePos;
     sf::Vector2u lastWindowSize;  // Track window size to detect changes
-    
-    // Camera control sliders
-    UISlider cameraSpeedSlider;
-    UISlider cameraAccelSlider;
-    UISlider cameraMaxSpeedSlider;
     bool cameraSettingsChanged = false;
 };
