@@ -9,7 +9,11 @@ UIToggle::~UIToggle() {
 }
 
 void UIToggle::initialize(float x, float y, float width, float height, const std::string& label, const sf::Font& font, bool defaultState) {
-    fontPtr = const_cast<sf::Font*>(&font);
+    // Set base class properties
+    position = sf::Vector2f(x, y);
+    size = sf::Vector2f(width, height);
+    fontPtr = &font;
+    
     isOn = defaultState;
     
     // Track (pill shape)

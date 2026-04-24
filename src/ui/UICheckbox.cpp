@@ -10,7 +10,10 @@ UICheckbox::~UICheckbox() {
 }
 
 void UICheckbox::initialize(float x, float y, float size, const std::string& label, const sf::Font& font) {
-    fontPtr = const_cast<sf::Font*>(&font);
+    // Set base class properties
+    position = sf::Vector2f(x, y);
+    this->size = sf::Vector2f(size, size);
+    fontPtr = &font;
     
     // Checkbox box
     checkboxBox.setSize(sf::Vector2f(size, size));

@@ -13,10 +13,14 @@ UISlider::~UISlider() {
 
 void UISlider::initialize(float x, float y, float width, float minVal, float maxVal, float defaultVal, 
                          const std::string& labelText, const sf::Font& font) {
+    // Set base class properties
+    position = sf::Vector2f(x, y);
+    size = sf::Vector2f(width, 30.0f);  // Track height
+    fontPtr = &font;
+    
     minValue = minVal;
     maxValue = maxVal;
     currentValue = defaultVal;
-    fontPtr = const_cast<sf::Font*>(&font);
     
     // Track background
     track.setSize(sf::Vector2f(width, 20));
