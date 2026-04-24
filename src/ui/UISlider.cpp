@@ -119,3 +119,25 @@ void UISlider::updateValueText() {
     std::string value = std::to_string(static_cast<int>(currentValue));
     valueText->setString(value);
 }
+
+void UISlider::setPosition(float x, float y) {
+    // Update base class position
+    UIElement::setPosition(x, y);
+    
+    // Update internal components
+    track.setPosition(sf::Vector2f(x, y));
+    label->setPosition(sf::Vector2f(x, y - 25.0f));
+    valueText->setPosition(sf::Vector2f(x + size.x + 10.0f, y - 25.0f));
+    
+    updateThumbPosition();
+}
+
+void UISlider::setSize(float width, float height) {
+    // Update base class size
+    UIElement::setSize(width, height);
+    
+    // Update track size
+    track.setSize(sf::Vector2f(width, 20));
+    
+    updateThumbPosition();
+}

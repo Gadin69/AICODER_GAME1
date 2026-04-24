@@ -77,20 +77,7 @@ void GameGUI::buildSkillbarLayout() {
         simSpeedSlider->initialize(0, 0, 300, 0.1f, 5.0f, 1.0f, "Sim Speed:", *fontPtr);
     }
     
-    // Add slider components to border with relative positioning
-    // Track: 10% from left, 25% from top, 60% width, 30% height
-    skillbarBorder.addChild(&simSpeedSlider->track, 0.10f, 0.25f, 0.60f, 0.30f);
-    
-    // Label: 10% from left, 5% from top (above track)
-    skillbarBorder.addChild(simSpeedSlider->label, 0.10f, 0.05f);
-    
-    // Value text: 72% from left, 25% from top (right of track)
-    skillbarBorder.addChild(simSpeedSlider->valueText, 0.72f, 0.25f);
-    
-    // Thumb: positioned dynamically by slider, but we add it here for rendering
-    // The slider's updateThumbPosition() will override the position
-    skillbarBorder.addChild(&simSpeedSlider->thumb, 0.10f, 0.20f, 0.05f, 0.40f);
-    
-    // Update thumb position to match slider value
-    simSpeedSlider->updateThumbPosition();
+    // Add slider as UIElement child (polymorphic - handles all internal rendering)
+    // Position: 5% from left, 15% from top, 90% width, 70% height of border
+    skillbarBorder.addChild(simSpeedSlider, 0.05f, 0.15f, 0.90f, 0.70f);
 }

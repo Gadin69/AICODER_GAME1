@@ -25,8 +25,8 @@ public:
     // Position/size accessors
     sf::Vector2f getPosition() const { return position; }
     sf::Vector2f getSize() const { return size; }
-    void setPosition(float x, float y);
-    void setSize(float width, float height);
+    virtual void setPosition(float x, float y);
+    virtual void setSize(float width, float height);
     
     // Visibility and state
     bool isVisible() const { return visible; }

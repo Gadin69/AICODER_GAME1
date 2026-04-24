@@ -19,6 +19,10 @@ public:
     void handleMouseRelease() override;
     void handleMouseMove(const sf::Vector2f& mousePos) override;
     
+    // Override to update internal component positions when moved
+    void setPosition(float x, float y) override;
+    void setSize(float width, float height) override;
+    
     void updateThumbPosition();
     void updateValueText();
     
