@@ -8,12 +8,15 @@ enum class ElementType {
     Solid,  // Rock/Stone
     Solid_Ice,  // Frozen water
     Solid_DryIce,  // Frozen CO2 (dry ice)
+    Solid_Oil,  // Frozen oil
     Solid_IndestructibleInsulator,  // Indestructible insulator (no heat transfer)
     Gas_O2,  // Oxygen/Steam
     Gas_Lava,  // Vaporized lava/magma
     Gas_CO2,  // Carbon Dioxide
+    Gas_Oil,  // Oil vapor
     Liquid_Water,
     Liquid_Lava,
+    Liquid_Oil,  // Oil (floats on water)
     ContaminatedWater,
     Solid_ContaminatedWater  // Frozen contaminated water
 };
@@ -107,12 +110,15 @@ private:
     static RockElement solidInstance;
     static IceElement iceInstance;
     static DryIceElement dryIceInstance;
+    static Solid_OilElement solidOilInstance;
     static IndestructibleInsulatorElement indestructibleInsulatorInstance;
     static SteamElement gasO2Instance;
     static Gas_LavaElement gasLavaInstance;
     static CO2Element gasCO2Instance;
+    static Gas_OilElement gasOilInstance;
     static WaterElement waterInstance;
     static LavaElement lavaInstance;
+    static OilElement oilInstance;
     static ContaminatedWaterElement contaminatedWaterInstance;
     static Solid_ContaminatedWaterElement solidContaminatedWaterInstance;
 };

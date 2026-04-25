@@ -55,3 +55,22 @@ public:
         return ElementType::Empty;
     }
 };
+
+// ============================================================================
+// OIL ELEMENT (Floats on water due to lower density: 800 kg/m³)
+// ============================================================================
+class OilElement : public LiquidElement {
+public:
+    OilElement() : LiquidElement(
+        "Oil", 800.0f, 20.0f, -40.0f, 300.0f,
+        2000.0f, 0.15f,  // Lower thermal conductivity than water
+        0.0f, 200000.0f,  // No fusion latent heat (amorphous solid), vaporization heat
+        0.05f, 0.0001f, 1.0f, -40.0f, 300.0f  // Higher viscosity than water
+    ) {}
+    
+    ElementType getPhaseAtTemperature(float temp) const override {
+        if (temp <= freezingPoint) return ElementType::Solid_Oil;
+        if (temp >= boilingPoint) return ElementType::Gas_Oil;
+        return ElementType::Empty;
+    }
+};

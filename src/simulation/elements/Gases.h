@@ -53,3 +53,21 @@ public:
         return ElementType::Empty;
     }
 };
+
+// ============================================================================
+// OIL VAPOR ELEMENT
+// ============================================================================
+class Gas_OilElement : public GasElement {
+public:
+    Gas_OilElement() : GasElement(
+        "Oil Vapor", 2.5f, 300.0f, -40.0f, 300.0f,
+        1500.0f, 0.02f,  // Moderate specific heat, low thermal conductivity
+        0.0f, 200000.0f,
+        0.0f, 0.003f, 0.4f, -40.0f, 300.0f
+    ) {}
+    
+    ElementType getPhaseAtTemperature(float temp) const override {
+        if (temp < condensationPoint - 5.0f) return ElementType::Liquid_Oil;
+        return ElementType::Empty;
+    }
+};

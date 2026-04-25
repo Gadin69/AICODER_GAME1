@@ -93,3 +93,21 @@ public:
     bool isDestructible() const override { return false; }   // Cannot be destroyed
     ElementType getPhaseAtTemperature(float temp) const override { return ElementType::Empty; }  // Never changes phase
 };
+
+// ============================================================================
+// FROZEN OIL ELEMENT
+// ============================================================================
+class Solid_OilElement : public SolidElement {
+public:
+    Solid_OilElement() : SolidElement(
+        "Frozen Oil", 850.0f, -50.0f, 
+        -40.0f, 300.0f, 1800.0f, 0.2f,
+        0.0f, 200000.0f,
+        0.0f, 0.00005f, 1.1f, -40.0f, 300.0f
+    ) {}
+    
+    ElementType getPhaseAtTemperature(float temp) const override {
+        if (temp > meltingPoint) return ElementType::Liquid_Oil;
+        return ElementType::Empty;
+    }
+};

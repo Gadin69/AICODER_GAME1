@@ -7,12 +7,15 @@ VacuumElement ElementTypes::vacuumInstance;
 RockElement ElementTypes::solidInstance;
 IceElement ElementTypes::iceInstance;
 DryIceElement ElementTypes::dryIceInstance;
+Solid_OilElement ElementTypes::solidOilInstance;
 IndestructibleInsulatorElement ElementTypes::indestructibleInsulatorInstance;
 SteamElement ElementTypes::gasO2Instance;
 Gas_LavaElement ElementTypes::gasLavaInstance;
 CO2Element ElementTypes::gasCO2Instance;
+Gas_OilElement ElementTypes::gasOilInstance;
 WaterElement ElementTypes::waterInstance;
 LavaElement ElementTypes::lavaInstance;
+OilElement ElementTypes::oilInstance;
 ContaminatedWaterElement ElementTypes::contaminatedWaterInstance;
 Solid_ContaminatedWaterElement ElementTypes::solidContaminatedWaterInstance;
 
@@ -28,6 +31,8 @@ const Element& ElementTypes::getElement(ElementType type) {
             return iceInstance;
         case ElementType::Solid_DryIce:
             return dryIceInstance;
+        case ElementType::Solid_Oil:
+            return solidOilInstance;
         case ElementType::Solid_IndestructibleInsulator:
             return indestructibleInsulatorInstance;
         case ElementType::Gas_O2:
@@ -36,10 +41,14 @@ const Element& ElementTypes::getElement(ElementType type) {
             return gasLavaInstance;
         case ElementType::Gas_CO2:
             return gasCO2Instance;
+        case ElementType::Gas_Oil:
+            return gasOilInstance;
         case ElementType::Liquid_Water:
             return waterInstance;
         case ElementType::Liquid_Lava:
             return lavaInstance;
+        case ElementType::Liquid_Oil:
+            return oilInstance;
         case ElementType::ContaminatedWater:
             return contaminatedWaterInstance;
         case ElementType::Solid_ContaminatedWater:

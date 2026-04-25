@@ -67,6 +67,9 @@ struct Cell {
             case ElementType::Solid_DryIce:
                 color = sf::Color(240, 240, 255, 220);  // White/light blue dry ice
                 break;
+            case ElementType::Solid_Oil:
+                color = sf::Color(60, 50, 40, 220);  // Dark brown frozen oil
+                break;
             case ElementType::Gas_O2:
                 color = sf::Color(100, 150, 255, 100);
                 break;
@@ -76,11 +79,17 @@ struct Cell {
             case ElementType::Gas_CO2:
                 color = sf::Color(100, 100, 100, 120);
                 break;
+            case ElementType::Gas_Oil:
+                color = sf::Color(180, 150, 100, 100);  // Brownish oil vapor
+                break;
             case ElementType::Liquid_Water:
                 color = sf::Color(50, 100, 255, 180);
                 break;
             case ElementType::Liquid_Lava:
                 color = sf::Color(255, 100, 0, 200);
+                break;
+            case ElementType::Liquid_Oil:
+                color = sf::Color(120, 90, 50, 200);  // Dark golden/brown oil
                 break;
             case ElementType::ContaminatedWater:
                 color = sf::Color(100, 150, 100, 180);

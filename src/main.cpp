@@ -375,6 +375,9 @@ void placeCellAtMouse(sf::Mouse::Button button) {
         } else if (currentElement == ElementType::Liquid_Lava) {
             color = sf::Color(255, 100, 0, 200);
             name = "Lava";
+        } else if (currentElement == ElementType::Liquid_Oil) {
+            color = sf::Color(120, 90, 50, 200);
+            name = "Oil";
         } else if (currentElement == ElementType::Gas_Lava) {
             color = sf::Color(255, 200, 50, 80);
             name = "Gas Lava";
@@ -869,6 +872,9 @@ int main() {
                         break;
                     case sf::Keyboard::Scancode::Num0:
                         currentElement = ElementType::Solid_ContaminatedWater;
+                        break;
+                    case sf::Keyboard::Scancode::Hyphen:
+                        currentElement = ElementType::Liquid_Oil;  // Oil (floats on water)
                         break;
                     case sf::Keyboard::Scancode::R:
                     {
