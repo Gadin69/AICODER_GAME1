@@ -642,49 +642,6 @@ bool GasSim::update(float deltaTime) {
                 
                 if (mergedUpward) continue;
                 
-                // ============ STEP 3b: GAS-GAS BUOYANCY - Swap with heavier gas below ============
-                // Lighter gases (steam) rise through heavier gases (CO2) based on density
-                if (cellMass <= MAX_GAS_MASS) {
-                    int downDir[2] = {0, 1};  // DOWN
-                    int nx = x + downDir[0];
-                    int ny = y + downDir[1];
-                    
-                    if (grid->isValidPosition(nx, ny)) {
-                        Cell& below = grid->getCell(nx, ny);
-                        
-                        // Check if below is a DIFFERENT gas type
-                        if (isGasType(below.elementType) && below.elementType != cell.elementType) {
-                            // Compare densities - lighter gas should rise
-                            const Element& cellProps = ElementTypes::getElement(cell.elementType);
-                            const Element& belowProps = ElementTypes::getElement(below.elementType);
-                            
-                            // If this gas is LIGHTER than the gas below, swap
-                            if (cellProps.density < belowProps.density) {
-                                // Check if either cell is already involved
-                                if (!isSwapInvolved[y][x] && !isSwapInvolved[ny][nx] &&
-                                    !isMergeSource[y][x] && !isMergeTarget[y][x] &&
-                                    !isMergeSource[ny][nx] && !isMergeTarget[ny][nx]) {
-                                    
-                                    FlowAction action;
-                                    action.fromX = x; action.fromY = y;
-                                    action.toX = nx; action.toY = ny;
-                                    action.massToMove = cellMass;
-                                    action.temperature = cell.temperature;
-                                    action.type = cell.elementType;
-                                    action.isMerge = false;  // SWAP
-                                    action.isOvermassExpansion = false;
-                                    flowActions.push_back(action);
-                                    
-                                    isSwapInvolved[y][x] = true;
-                                    isSwapInvolved[ny][nx] = true;
-                                    
-                                    continue;  // Done with this cell
-                                }
-                            }
-                        }
-                    }
-                }
-                
                 // ============ STEP 4: MERGE sideways (low→high mass) ============
                 int sideDirections[2][2] = {{-1, 0}, {1, 0}};
                 bool mergedSideways = false;
