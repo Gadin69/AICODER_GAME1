@@ -1064,13 +1064,15 @@ void FluidSim::leakLiquidDiagonally(int x, int y, float deltaTime) {
 bool FluidSim::isLiquidType(ElementType type) {
     return type == ElementType::Liquid_Water || 
            type == ElementType::Liquid_Lava || 
+           type == ElementType::Liquid_Oil ||
            type == ElementType::ContaminatedWater;
 }
 
 bool FluidSim::canDisplace(ElementType fluid, ElementType target) {
     // Liquids can displace gases
-    if (isLiquidType(fluid) && 
-        (target == ElementType::Gas_O2 || target == ElementType::Gas_CO2 || target == ElementType::Gas_Lava)) {
+    if (isLiquidType(fluid) &&
+        (target == ElementType::Gas_O2 || target == ElementType::Gas_CO2 || 
+         target == ElementType::Gas_Lava || target == ElementType::Gas_Oil)) {
         return true;
     }
     return false;
