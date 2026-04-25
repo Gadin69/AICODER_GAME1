@@ -152,6 +152,14 @@ bool GasSim::update(float deltaTime) {
             // Only process gas cells from snapshot
             if (!isGasType(gasSnapshot[y][x].type)) continue;
             
+            // DEBUG: Confirm we're processing gas cells
+            static int processDebugCount = 0;
+            if (processDebugCount < 5) {
+                std::cerr << "[GAS LOOP] Processing gas cell at (" << x << "," << y << ") type=" 
+                          << static_cast<int>(gasSnapshot[y][x].type) << " mass=" << currentMass << std::endl;
+                processDebugCount++;
+            }
+            
             totalGasCellsFound++;
             
             float currentMass = gasSnapshot[y][x].mass;
@@ -437,6 +445,7 @@ bool GasSim::update(float deltaTime) {
             float temperature;
             ElementType type;
             bool isMerge;  // true = merge into target, false = swap positions
+            bool isOvermassExpansion;  // true = from STEP 5 over-mass expansion (allow exceeding MAX)
         };
         
         std::vector<FlowAction> flowActions;
@@ -475,7 +484,11 @@ bool GasSim::update(float deltaTime) {
                 int upDirCount = 3;
                 
                 // ============ STEP 1: MOVE upward - SWAP into vacuum ============
+                // CRITICAL: Over-mass cells should NOT move upward - they need to expand downward
                 bool movedUpward = false;
+                
+                // Only allow upward movement for non-over-mass cells
+                if (cellMass <= MAX_GAS_MASS) {
                 
                 // Small chance to try sideways movement instead of upward (natural spreading)
                 static unsigned int lateralMoveSeed = 77777;
@@ -508,6 +521,7 @@ bool GasSim::update(float deltaTime) {
                             action.temperature = cell.temperature;
                             action.type = cell.elementType;
                             action.isMerge = false;  // SWAP
+                            action.isOvermassExpansion = false;
                             flowActions.push_back(action);
                             
                             // Mark as reserved
@@ -543,6 +557,7 @@ bool GasSim::update(float deltaTime) {
                             action.temperature = cell.temperature;
                             action.type = cell.elementType;
                             action.isMerge = false;  // SWAP
+                            action.isOvermassExpansion = false;
                             flowActions.push_back(action);
                             
                             // Mark as reserved
@@ -553,7 +568,8 @@ bool GasSim::update(float deltaTime) {
                             break;  // Done with this cell
                         }
                     }
-                }
+                }  // End if (!movedUpward)
+                }  // End if cellMass <= MAX_GAS_MASS (STEP 1)
                 
                 if (movedUpward) continue;
                 
@@ -572,53 +588,57 @@ bool GasSim::update(float deltaTime) {
                 
                 // ============ STEP 3: MERGE upward ============
                 // Transfer mass to same gas above until above gas is at max
+                // CRITICAL: Over-mass cells should NOT merge upward - they need to expand downward instead
                 bool mergedUpward = false;
-                for (int i = 0; i < upDirCount; i++) {
-                    int nx = x + upDirections[i][0];
-                    int ny = y + upDirections[i][1];
-                    
-                    if (!grid->isValidPosition(nx, ny)) continue;
-                    
-                    Cell& neighbor = grid->getCell(nx, ny);
-                    
-                    // Can only merge into same gas type
-                    if (!isGasType(neighbor.elementType) || neighbor.elementType != cell.elementType) {
-                        continue;
-                    }
-                    
-                    // Merge if neighbor has space
-                    if (neighbor.mass < MAX_GAS_MASS) {
-                        // RESERVE PARTNER FIRST
-                        if (isMergeSource[y][x] || isMergeTarget[y][x] || 
-                            isMergeSource[ny][nx] || isMergeTarget[ny][nx]) {
+                
+                // Skip upward merge if cell is over-mass (let STEP 5 handle downward expansion)
+                if (cellMass <= MAX_GAS_MASS) {
+                    for (int i = 0; i < upDirCount; i++) {
+                        int nx = x + upDirections[i][0];
+                        int ny = y + upDirections[i][1];
+                        
+                        if (!grid->isValidPosition(nx, ny)) continue;
+                        
+                        Cell& neighbor = grid->getCell(nx, ny);
+                        
+                        // Can only merge into same gas type
+                        if (!isGasType(neighbor.elementType) || neighbor.elementType != cell.elementType) {
                             continue;
                         }
                         
-                        // Transfer enough to fill target or empty source
-                        float spaceAvailable = MAX_GAS_MASS - neighbor.mass;
-                        float transferAmount = std::min(cellMass, spaceAvailable);
-                        
-                        
-
-                        if (transferAmount > 0) {
-                            // RESERVE IMMEDIATELY
-                            isMergeSource[y][x] = true;
-                            isMergeTarget[ny][nx] = true;
+                        // Merge if neighbor has space
+                        if (neighbor.mass < MAX_GAS_MASS) {
+                            // RESERVE PARTNER FIRST
+                            if (isMergeSource[y][x] || isMergeTarget[y][x] || 
+                                isMergeSource[ny][nx] || isMergeTarget[ny][nx]) {
+                                continue;
+                            }
                             
-                            FlowAction action;
-                            action.fromX = x; action.fromY = y;
-                            action.toX = nx; action.toY = ny;
-                            action.massToMove = transferAmount;
-                            action.temperature = cell.temperature;
-                            action.type = cell.elementType;
-                            action.isMerge = true;
-                            flowActions.push_back(action);
+                            // Transfer enough to fill target or empty source
+                            float spaceAvailable = MAX_GAS_MASS - neighbor.mass;
+                            float transferAmount = std::min(cellMass, spaceAvailable);
                             
-                            mergedUpward = true;
-                            break;  // Done with this cell
+                            if (transferAmount > 0) {
+                                // RESERVE IMMEDIATELY
+                                isMergeSource[y][x] = true;
+                                isMergeTarget[ny][nx] = true;
+                                
+                                FlowAction action;
+                                action.fromX = x; action.fromY = y;
+                                action.toX = nx; action.toY = ny;
+                                action.massToMove = transferAmount;
+                                action.temperature = cell.temperature;
+                                action.type = cell.elementType;
+                                action.isMerge = true;
+                                action.isOvermassExpansion = false;
+                                flowActions.push_back(action);
+                                
+                                mergedUpward = true;
+                                break;  // Done with this cell
+                            }
                         }
-                    }
-                }
+                    }  // End for loop
+                }  // End if cellMass <= MAX_GAS_MASS
                 
                 if (mergedUpward) continue;
                 
@@ -660,6 +680,7 @@ bool GasSim::update(float deltaTime) {
                                 action.temperature = cell.temperature;
                                 action.type = cell.elementType;
                                 action.isMerge = true;
+                                action.isOvermassExpansion = false;
                                 flowActions.push_back(action);
                                 
                                 mergedSideways = true;
@@ -671,7 +692,90 @@ bool GasSim::update(float deltaTime) {
                 
                 if (mergedSideways) continue;
                 
-                // ============ STEP 5: MOVE sideways - SWAP into vacuum ============
+                // ============ STEP 5: OVER-MASS GAS EXPANDS IN ALL 8 DIRECTIONS ============
+                // When gas is compressed beyond MAX_GAS_MASS, distribute excess mass to ALL
+                // available neighbors (vacuum or same gas), prioritizing downward directions.
+                if (cellMass > MAX_GAS_MASS) {
+                    float excessMass = cellMass - MAX_GAS_MASS;
+                    float remainingExcess = excessMass;
+                    
+                    // Define all 8 directions in priority order: DOWN(3), SIDES(2), UP(3)
+                    int allDirections[8][2] = {
+                        {0, 1}, {-1, 1}, {1, 1},   // DOWN, DOWN-LEFT, DOWN-RIGHT (priority 1)
+                        {-1, 0}, {1, 0},            // LEFT, RIGHT (priority 2)
+                        {0, -1}, {-1, -1}, {1, -1}  // UP, UP-LEFT, UP-RIGHT (priority 3)
+                    };
+                    
+                    // Count available neighbors first
+                    struct NeighborInfo {
+                        int x, y;
+                        bool isVacuum;
+                        bool isSameGas;
+                        float spaceAvailable;
+                    };
+                    std::vector<NeighborInfo> availableNeighbors;
+                    
+                    for (int i = 0; i < 8; i++) {
+                        int nx = x + allDirections[i][0];
+                        int ny = y + allDirections[i][1];
+                        
+                        if (!grid->isValidPosition(nx, ny)) continue;
+                        
+                        // Check if already involved in an action
+                        if (isSwapInvolved[y][x] || isSwapInvolved[ny][nx] ||
+                            isMergeSource[y][x] || isMergeTarget[y][x] ||
+                            isMergeSource[ny][nx] || isMergeTarget[ny][nx]) {
+                            continue;
+                        }
+                        
+                        Cell& neighbor = grid->getCell(nx, ny);
+                        
+                        if (neighbor.elementType == ElementType::Vacuum) {
+                            availableNeighbors.push_back({nx, ny, true, false, 999999.0f});
+                        } else if (isGasType(neighbor.elementType) && neighbor.elementType == cell.elementType) {
+                            // For same gas, calculate how much space (allow exceeding MAX for cascade)
+                            float space = std::max(0.0f, neighbor.mass < MAX_GAS_MASS ? 
+                                                  (MAX_GAS_MASS - neighbor.mass) : excessMass);
+                            availableNeighbors.push_back({nx, ny, false, true, space});
+                        }
+                    }
+                    
+                    // Distribute excess mass across all available neighbors
+                    if (!availableNeighbors.empty() && remainingExcess > 0.0f) {
+                        float massPerNeighbor = remainingExcess / availableNeighbors.size();
+                        
+                        for (const auto& neighbor : availableNeighbors) {
+                            if (remainingExcess <= 0.0f) break;
+                            
+                            float massToPush = std::min(massPerNeighbor, remainingExcess);
+                            
+                            FlowAction action;
+                            action.fromX = x; action.fromY = y;
+                            action.toX = neighbor.x; action.toY = neighbor.y;
+                            action.massToMove = massToPush;
+                            action.temperature = cell.temperature;
+                            action.type = cell.elementType;
+                            action.isMerge = true;
+                            action.isOvermassExpansion = true;  // Mark as over-mass expansion
+                            flowActions.push_back(action);
+                            
+                            isMergeSource[y][x] = true;
+                            isMergeTarget[neighbor.y][neighbor.x] = true;
+                            
+                            remainingExcess -= massToPush;
+                        }
+                        
+                        static int overmassDebugCount = 0;
+                        if (overmassDebugCount < 10) {
+                            std::cerr << "[GAS EXPAND] Over-mass (" << cellMass << "kg) distributing " 
+                                      << excessMass << "kg to " << availableNeighbors.size() 
+                                      << " neighbors, keeping " << MAX_GAS_MASS << "kg" << std::endl;
+                            overmassDebugCount++;
+                        }
+                    }
+                }
+                
+                // ============ STEP 6: MOVE sideways - SWAP into vacuum ============
                 // Only if blocked on both sides (can't merge)
                 bool blockedLeft = false;
                 bool blockedRight = false;
@@ -728,6 +832,7 @@ bool GasSim::update(float deltaTime) {
                 action.temperature = cell.temperature;
                 action.type = cell.elementType;
                 action.isMerge = false;  // SWAP
+                action.isOvermassExpansion = false;
                 flowActions.push_back(action);
                 
                 // Mark as reserved
@@ -752,15 +857,34 @@ bool GasSim::update(float deltaTime) {
             
             if (action.isMerge) {
                 // MERGE: Push mass into target, leftover stays
-                float spaceAvailable = MAX_GAS_MASS - toCell.mass;
-                float massToMerge = std::min(action.massToMove, spaceAvailable);
-                float leftover = action.massToMove - massToMerge;
+                // CRITICAL: Allow exceeding MAX_GAS_MASS for over-mass expansion actions
+                
+                float massToMerge;
+                float leftover;
+                
+                if (action.isOvermassExpansion) {
+                    // Over-mass expansion: allow target to exceed MAX_GAS_MASS
+                    massToMerge = action.massToMove;
+                    leftover = 0.0f;
+                } else {
+                    // Regular merge: respect MAX_GAS_MASS limit
+                    float spaceAvailable = MAX_GAS_MASS - toCell.mass;
+                    massToMerge = std::min(action.massToMove, spaceAvailable);
+                    leftover = action.massToMove - massToMerge;
+                }
                 
                 // DEBUG: Log merge details for tracking
-                DEBUG_PRINT("[MERGE APPLY] (" << action.fromX << "," << action.fromY << ")->(" 
+                DEBUG_PRINT("[MERGE APPLY] " << (action.isMerge ? "MERGE" : "SWAP")
+                          << " (" << action.fromX << "," << action.fromY << ")->("
                           << action.toX << "," << action.toY << ") mass=" << action.massToMove 
-                          << " targetMass=" << toCell.mass << " space=" << spaceAvailable 
+                          << " targetMass=" << toCell.mass
+                          << " overmass=" << (action.isOvermassExpansion ? "YES" : "NO")
                           << " merging=" << massToMerge << " leftover=" << leftover);
+                
+                // CRITICAL: If target is vacuum, convert it to gas type first
+                if (toCell.elementType == ElementType::Vacuum && massToMerge > 0.0f) {
+                    toCell.elementType = action.type;
+                }
                 
                 // Mass-weighted temperature average
                 float totalMass = toCell.mass + massToMerge;
@@ -773,7 +897,13 @@ bool GasSim::update(float deltaTime) {
                 calculatePressure(action.toX, action.toY);
                 
                 // Handle leftover in source cell
-                if (leftover < 0.00001f) {
+                if (action.isOvermassExpansion) {
+                    // Over-mass expansion: source should keep MAX_GAS_MASS
+                    fromCell.mass = MAX_GAS_MASS;
+                    fromCell.updated = true;
+                    fromCell.updateColor();
+                    calculatePressure(action.fromX, action.fromY);
+                } else if (leftover < 0.00001f) {
                     // DEBUG: Track when high-mass cells are converted to vacuum
                     DEBUG_PRINT("[VACUUM CONVERT] Cell (" << action.fromX << "," << action.fromY 
                               << ") converted to vacuum, original mass=" << action.massToMove 

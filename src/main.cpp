@@ -115,49 +115,20 @@ void initializeDemo() {
     simGrid.initialize(settings.gridWidth, settings.gridHeight);
     simManager.initialize(simGrid);
     
-    // Create some solid walls
+    // Create stone walls around the edges only
     simGrid.lock();  // THREAD-SAFE: Lock before initialization
     
     for (int x = 0; x < settings.gridWidth; ++x) {
-        simGrid.setCellType(x, 0, ElementType::Solid);
-        simGrid.setCellType(x, settings.gridHeight - 1, ElementType::Solid);
+        simGrid.setCellType(x, 0, ElementType::Solid);  // Top wall
+        simGrid.setCellType(x, settings.gridHeight - 1, ElementType::Solid);  // Bottom wall
     }
     for (int y = 0; y < settings.gridHeight; ++y) {
-        simGrid.setCellType(0, y, ElementType::Solid);
-        simGrid.setCellType(settings.gridWidth - 1, y, ElementType::Solid);
+        simGrid.setCellType(0, y, ElementType::Solid);  // Left wall
+        simGrid.setCellType(settings.gridWidth - 1, y, ElementType::Solid);  // Right wall
     }
     
-    // Add some internal walls (proportional to grid size)
-    int wallStartX = settings.gridWidth / 4;
-    int wallEndX = settings.gridWidth * 3 / 4;
-    int wallY = settings.gridHeight / 2;
-    for (int x = wallStartX; x < wallEndX; ++x) {
-        simGrid.setCellType(x, wallY, ElementType::Solid);
-    }
-    // Add gap in wall
-    simGrid.setCellType(wallStartX + 3, wallY, ElementType::Empty);
-    simGrid.setCellType(wallStartX + 4, wallY, ElementType::Empty);
-    simGrid.setCellType(wallStartX + 5, wallY, ElementType::Empty);
-    
-    // Add some test water and gas (proportional to grid size)
-    int waterStartX = settings.gridWidth / 8;
-    int waterEndX = settings.gridWidth / 4;
-    for (int x = waterStartX; x < waterEndX; ++x) {
-        simGrid.setCellType(x, settings.gridHeight - 2, ElementType::Liquid_Water);
-    }
-    int gasStartX = settings.gridWidth * 3 / 4;
-    int gasEndX = settings.gridWidth * 7 / 8;
-    for (int x = gasStartX; x < gasEndX; ++x) {
-        simGrid.setCellType(x, 5, ElementType::Gas_O2);
-        
-        // Set gas cell properties (mass, temperature, pressure)
-        Cell& gasCell = simGrid.getCell(x, 5);
-        ElementProperties gasProps = ElementTypes::getElement(ElementType::Gas_O2);
-        gasCell.temperature = gasProps.defaultTemperature;
-        gasCell.mass = 10.0f;  // Full gas cell
-        gasCell.pressure = (gasCell.mass * 8.314f * (gasCell.temperature + 273.15f)) / 0.001f;
-        gasCell.updated = true;
-    }
+    // NO internal walls, NO pre-placed water, NO pre-placed gas
+    // Clean vacuum map with stone border only
     
     // Update all cell colors
     for (int y = 0; y < simGrid.getHeight(); ++y) {
@@ -250,34 +221,16 @@ void initializeFonts() {
     wallTile.solid = true;
     wallTile.name = "Solid";
     
-    TileInfo waterTile;
-    waterTile.color = sf::Color(50, 100, 255, 180);
-    waterTile.solid = false;
-    waterTile.name = "Water";
-    
-    TileInfo gasTile;
-    gasTile.color = sf::Color(100, 150, 255, 100);
-    gasTile.solid = false;
-    gasTile.name = "O2";
-    
+    // Set stone border on tileMap (visual layer)
     for (int x = 0; x < 40; ++x) {
-        tileMap.setTile(x, 0, wallTile);
-        tileMap.setTile(x, 29, wallTile);
+        tileMap.setTile(x, 0, wallTile);  // Top
+        tileMap.setTile(x, 29, wallTile);  // Bottom
     }
     for (int y = 0; y < 30; ++y) {
-        tileMap.setTile(0, y, wallTile);
-        tileMap.setTile(39, y, wallTile);
+        tileMap.setTile(0, y, wallTile);  // Left
+        tileMap.setTile(39, y, wallTile);  // Right
     }
-    for (int x = 10; x < 30; ++x) {
-        tileMap.setTile(x, 15, wallTile);
-    }
-    // Add water and gas
-    for (int x = 5; x < 10; ++x) {
-        tileMap.setTile(x, 28, waterTile);
-    }
-    for (int x = 30; x < 35; ++x) {
-        tileMap.setTile(x, 5, gasTile);
-    }
+    // NO internal walls, NO water, NO gas tiles
     
     if (DEBUG_MODE) std::cout << "Tilemap setup complete" << std::endl;
     
