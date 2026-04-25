@@ -916,7 +916,7 @@ bool GasSim::update(float deltaTime) {
                     fromCell.pressure = 0.0f;
                     fromCell.velocityX = 0.0f;
                     fromCell.velocityY = 0.0f;
-                    fromCell.color = sf::Color::Black;
+                    fromCell.updateColor();  // Use proper vacuum color from updateColor()
                     fromCell.updated = true;
                 } else {
                     // Cell still has mass - keep as gas

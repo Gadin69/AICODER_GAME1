@@ -294,6 +294,162 @@ bool FluidSim::update(float deltaTime) {
         }
     }
     
+    // ============ STEP 2: LIQUID LEVELING (Horizontal Spreading) ============
+    // ONLY applies to liquid that couldn't move downward (blocked at bottom)
+    // After ~1 second of being blocked, liquid starts spreading sideways
+    // This makes liquid spread out to find lowest point on flat surfaces
+    {
+        // Track which cells moved downward in STEP 1
+        // We need to re-check because flowActions were already applied
+        // Instead, check if cell is at bottom or blocked below
+        
+        // First pass: identify leveling actions
+        struct LevelAction {
+            int fromX, fromY;
+            int toX, toY;
+            float massToMove;
+        };
+        std::vector<LevelAction> levelActions;
+        
+        // Track which cells are involved to prevent conflicts
+        std::vector<std::vector<bool>> levelSource(height, std::vector<bool>(width, false));
+        std::vector<std::vector<bool>> levelTarget(height, std::vector<bool>(width, false));
+        
+        // Random seed for chance-based leveling (spreads over time, not instantly)
+        static unsigned int levelRandomSeed = 99999;
+        auto levelRand = [&]() -> int {
+            levelRandomSeed = levelRandomSeed * 1103515245 + 12345;
+            return (levelRandomSeed / 65536) % 100;
+        };
+        
+        for (int y = 1; y < height - 1; ++y) {
+            for (int x = 1; x < width - 1; ++x) {
+                if (!grid->isValidPosition(x, y)) continue;
+                
+                Cell& cell = grid->getCell(x, y);
+                if (!isLiquidType(cell.elementType)) continue;
+                if (cell.mass < 0.01f) continue;  // Skip near-empty cells
+                
+                // CRITICAL: Only level if cell is blocked from moving downward
+                // Check if below cell is NOT vacuum (blocked by liquid, solid, or gas)
+                bool canMoveDown = false;
+                if (grid->isValidPosition(x, y + 1)) {
+                    Cell& below = grid->getCell(x, y + 1);
+                    if (below.elementType == ElementType::Vacuum) {
+                        canMoveDown = true;
+                    }
+                }
+                
+                // If can move down, skip horizontal spreading (let gravity handle it)
+                if (canMoveDown) continue;
+                
+                // CRITICAL: Small droplets (< 0.1kg) only spread if resting on same liquid
+                // - Small droplet on vacuum/solid/gas: completely still, just sits there
+                // - Small droplet on same liquid: can spread (part of flowing body)
+                // - Large amount (>= 0.1kg): always spreads when blocked
+                bool isOnSameLiquid = false;
+                if (grid->isValidPosition(x, y + 1)) {
+                    Cell& below = grid->getCell(x, y + 1);
+                    if (isLiquidType(below.elementType) && below.elementType == liquidType) {
+                        isOnSameLiquid = true;
+                    }
+                }
+                
+                if (cellMass < 0.1f && !isOnSameLiquid) {
+                    // Small droplet NOT on same liquid - completely still, just sits there
+                    continue;
+                }
+                
+                // Random chance to spread (~10% per tick = ~1 second at 10 ticks/sec)
+                if (levelRand() >= 10) continue;
+                
+                ElementType liquidType = cell.elementType;
+                float cellMass = cell.mass;
+                
+                // Try to spread LEFT and RIGHT
+                int directions[2] = {-1, 1};  // LEFT, RIGHT
+                
+                for (int dir : directions) {
+                    int nx = x + dir;
+                    int ny = y;
+                    
+                    if (!grid->isValidPosition(nx, ny)) continue;
+                    
+                    // Check if already involved in a level action
+                    if (levelSource[y][x] || levelTarget[ny][nx]) continue;
+                    
+                    Cell& neighbor = grid->getCell(nx, ny);
+                    
+                    // CASE 1: Spread into VACUUM
+                    if (neighbor.elementType == ElementType::Vacuum) {
+                        // Move portion of mass into vacuum (50% split to create spreading)
+                        float massToMove = cellMass * 0.5f;
+                        
+                        if (massToMove > 0.01f) {
+                            levelActions.push_back({x, y, nx, ny, massToMove});
+                            levelSource[y][x] = true;
+                            levelTarget[ny][nx] = true;
+                        }
+                    }
+                    // CASE 2: Equalize with SAME LIQUID
+                    else if (isLiquidType(neighbor.elementType) && neighbor.elementType == liquidType) {
+                        float neighborMass = neighbor.mass;
+                        float massDiff = cellMass - neighborMass;
+                        
+                        // If this cell has significantly more mass (>5%), transfer some
+                        if (massDiff > 0.05f * cellMass && !levelSource[ny][nx]) {
+                            // Transfer half the difference to equalize
+                            float massToMove = massDiff * 0.5f;
+                            
+                            if (massToMove > 0.01f) {
+                                levelActions.push_back({x, y, nx, ny, massToMove});
+                                levelSource[y][x] = true;
+                                levelTarget[ny][nx] = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Second pass: apply leveling actions
+        for (const auto& action : levelActions) {
+            Cell& fromCell = grid->getCell(action.fromX, action.fromY);
+            Cell& toCell = grid->getCell(action.toX, action.toY);
+            
+            // Verify cells are still in valid state
+            if (!isLiquidType(fromCell.elementType)) continue;
+            
+            if (toCell.elementType == ElementType::Vacuum) {
+                // Moving into vacuum - convert target to liquid
+                toCell.elementType = fromCell.elementType;
+                toCell.mass = action.massToMove;
+                toCell.temperature = fromCell.temperature;
+                toCell.updated = true;
+                toCell.updateColor();
+                
+                // Remove mass from source
+                fromCell.mass -= action.massToMove;
+                fromCell.updated = true;
+                fromCell.updateColor();
+            } else if (isLiquidType(toCell.elementType) && toCell.elementType == fromCell.elementType) {
+                // Merging with same liquid - mass-weighted temperature average
+                float totalMass = toCell.mass + action.massToMove;
+                float newTemp = (toCell.mass * toCell.temperature + action.massToMove * fromCell.temperature) / totalMass;
+                
+                toCell.mass += action.massToMove;
+                toCell.temperature = newTemp;
+                toCell.updated = true;
+                toCell.updateColor();
+                
+                // Remove mass from source
+                fromCell.mass -= action.massToMove;
+                fromCell.updated = true;
+                fromCell.updateColor();
+            }
+        }
+    }
+    
     // Apply all flow actions simultaneously
     for (const auto& action : flowActions) {
         // CRITICAL FIX: Handle cleanup actions (leftover mass -> vacuum)
@@ -310,7 +466,7 @@ bool FluidSim::update(float deltaTime) {
             cell.phaseTransitionProgress = 0.0f;
             cell.phaseTransitionSpeed = 0.0f;
             cell.microMassDecayTime = 0.0f;
-            cell.color = sf::Color(10, 10, 15);
+            cell.updateColor();  // Use proper vacuum color
             continue;
         }
         
@@ -349,7 +505,7 @@ bool FluidSim::update(float deltaTime) {
                 fromCell.phaseTransitionProgress = 0.0f;
                 fromCell.phaseTransitionSpeed = 0.0f;
                 fromCell.microMassDecayTime = 0.0f;
-                fromCell.color = sf::Color(10, 10, 15);
+                fromCell.updateColor();  // Use proper vacuum color
             } else {
                 fromCell.updated = true;
             }
@@ -380,7 +536,7 @@ bool FluidSim::update(float deltaTime) {
                     fromCell.phaseTransitionProgress = 0.0f;
                     fromCell.phaseTransitionSpeed = 0.0f;
                     fromCell.microMassDecayTime = 0.0f;
-                    fromCell.color = sf::Color(10, 10, 15);
+                    fromCell.updateColor();  // Use proper vacuum color
                 } else {
                     fromCell.updated = true;
                     fromCell.updateColor();
@@ -411,7 +567,7 @@ bool FluidSim::update(float deltaTime) {
                 fromCell.phaseTransitionProgress = 0.0f;
                 fromCell.phaseTransitionSpeed = 0.0f;
                 fromCell.microMassDecayTime = 0.0f;
-                fromCell.color = sf::Color(10, 10, 15);
+                fromCell.updateColor();  // Use proper vacuum color
             } else if (action.type == ElementType::Vacuum && action.fromX == action.toX && action.fromY == action.toY) {
                 // Cleanup action: Convert cell to vacuum (leftover micro-mass)
                 fromCell.elementType = ElementType::Vacuum;
@@ -424,7 +580,7 @@ bool FluidSim::update(float deltaTime) {
                 fromCell.phaseTransitionProgress = 0.0f;
                 fromCell.phaseTransitionSpeed = 0.0f;
                 fromCell.microMassDecayTime = 0.0f;
-                fromCell.color = sf::Color(10, 10, 15);
+                fromCell.updateColor();  // Use proper vacuum color
             } else {
                 // Swapping with gas or different liquid
                 ElementType tempType = fromCell.elementType;
@@ -662,7 +818,7 @@ void FluidSim::moveLiquidDown(int x, int y) {
         cell.phaseTransitionProgress = 0.0f;
         cell.phaseTransitionSpeed = 0.0f;
         cell.microMassDecayTime = 0.0f;
-        cell.color = sf::Color(10, 10, 15);
+        cell.updateColor();  // Use proper vacuum color
         return;
     }
     
@@ -713,7 +869,7 @@ void FluidSim::moveLiquidSideways(int x, int y) {
             cell.phaseTransitionProgress = 0.0f;
             cell.phaseTransitionSpeed = 0.0f;
             cell.microMassDecayTime = 0.0f;
-            cell.color = sf::Color(10, 10, 15);
+            cell.updateColor();  // Use proper vacuum color
             return;
         }
         
@@ -745,7 +901,7 @@ void FluidSim::moveLiquidSideways(int x, int y) {
             cell.phaseTransitionProgress = 0.0f;
             cell.phaseTransitionSpeed = 0.0f;
             cell.microMassDecayTime = 0.0f;
-            cell.color = sf::Color(10, 10, 15);
+            cell.updateColor();  // Use proper vacuum color
             return;
         }
     }
@@ -830,7 +986,7 @@ void FluidSim::leakLiquidDiagonally(int x, int y, float deltaTime) {
                 cell.phaseTransitionProgress = 0.0f;
                 cell.phaseTransitionSpeed = 0.0f;
                 cell.microMassDecayTime = 0.0f;
-                cell.color = sf::Color(10, 10, 15);
+                cell.updateColor();  // Use proper vacuum color
             }
             
             break;  // Only leak to one diagonal per tick

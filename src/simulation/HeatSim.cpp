@@ -416,7 +416,7 @@ void HeatSim::checkPhaseChangeTriggers(int x, int y, float /*deltaTime*/) {
                     cell.phaseTransitionProgress = 0.0f;
                     cell.phaseTransitionSpeed = 0.0f;
                     cell.microMassDecayTime = 0.0f;
-                    cell.color = sf::Color(10, 10, 15);
+                    cell.updateColor();  // Use proper vacuum color
                     break;
                 }
             }
