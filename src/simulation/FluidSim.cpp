@@ -58,6 +58,12 @@ bool FluidSim::update(float deltaTime) {
             float cellMass = cell.mass;
             const Element& props = ElementTypes::getElement(cell.elementType);
             
+            // VISCOSITY-BASED LEAK PROBABILITY
+            // High viscosity = low chance to leak, Low viscosity = high chance
+            // Water (1.0) ~90% chance, Honey (50) ~20% chance, Lava (100) ~10% chance
+            float leakProbability = 1.0f / (1.0f + props.viscosity * 0.1f);
+            bool shouldLeak = (simpleRand() % 1000 < leakProbability * 1000);  // Random check
+            
             // ORDERED PRIORITY FLOW (prevents mass duplication):
             // 1. MERGE DOWN into same liquid (fill from bottom)
             // 2. Fall into vacuum/gas below
@@ -99,7 +105,8 @@ bool FluidSim::update(float deltaTime) {
                     }
                 }
                 // DOWN into VACUUM - leak 10% of mass (natural falling)
-                else if (belowType == ElementType::Vacuum) {
+                // Viscosity determines probability of leaking this tick
+                else if (belowType == ElementType::Vacuum && shouldLeak) {
                     if (!isMergeSource[y][x] && !isMergeTarget[y][x] &&
                         !isMergeSource[downY][downX] && !isMergeTarget[downY][downX]) {
                         // Convert vacuum to liquid type with source temperature
@@ -149,10 +156,27 @@ bool FluidSim::update(float deltaTime) {
                 }
             }
             
-            // PRIORITY 2: SIDES into VACUUM/GAS (only if didn't fall down AND has enough mass)
+            // PRIORITY 2: SIDES into VACUUM/GAS (only if blocked from falling OR viscosity prevented fall)
             static constexpr float MIN_SIDEWAY_MASS = 0.1f;  // Minimum mass to spread sideways into empty space
             static constexpr float CONSOLIDATE_THRESHOLD = 0.05f;  // Below this, consolidate (hysteresis gap: 0.05-0.1 prevents oscillation)
-            if (!actedThisTick && cellMass >= MIN_SIDEWAY_MASS) {
+            
+            // Check if downward was possible (vacuum/gas below) but blocked by viscosity
+            bool downwardPossible = false;
+            int checkDownX = x;
+            int checkDownY = y + 1;
+            if (grid->isValidPosition(checkDownX, checkDownY)) {
+                Cell& checkBelow = grid->getCell(checkDownX, checkDownY);
+                ElementType checkBelowType = checkBelow.elementType;
+                const Element& checkBelowProps = ElementTypes::getElement(checkBelowType);
+                downwardPossible = (checkBelowType == ElementType::Vacuum || 
+                                   checkBelowProps.isGas ||
+                                   (isLiquidType(checkBelowType) && checkBelowType == cell.elementType));
+            }
+            
+            // Only spread sideways if: didn't act this tick AND (blocked downward by solid)
+            // Don't spread if downward is possible but blocked by viscosity (honey should fall, not spread)
+            bool canSpreadSideways = !actedThisTick && cellMass >= MIN_SIDEWAY_MASS && !downwardPossible;
+            if (canSpreadSideways) {
                 int sideDirs[2] = {-1, 1};  // LEFT, RIGHT
                 for (int side = 0; side < 2 && !actedThisTick; side++) {
                     int sideX = x + sideDirs[side];
@@ -172,7 +196,8 @@ bool FluidSim::update(float deltaTime) {
                     action.isMerge = false;
                     
                     // SIDE into VACUUM - leak 10% of mass (natural spreading)
-                    if (sideType == ElementType::Vacuum) {
+                    // Viscosity determines probability of leaking this tick
+                    if (sideType == ElementType::Vacuum && shouldLeak) {
                         if (!isMergeSource[y][x] && !isMergeTarget[y][x] &&
                             !isMergeSource[sideY][sideX] && !isMergeTarget[sideY][sideX]) {
                             // Convert vacuum to liquid type with source temperature
