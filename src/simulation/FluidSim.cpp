@@ -6,6 +6,33 @@
 
 FluidSim::FluidSim() 
     : SimulationSystem("FluidSim", 0.1f) {  // Update every 100ms (slower, more realistic)
+    // Initialize liquid types dynamically
+    initializeLiquidTypes();
+}
+
+void FluidSim::initializeLiquidTypes() {
+    liquidTypes.clear();
+    
+    // Iterate through all ElementType values and check if they're liquids
+    // We need to check each enum value individually
+    ElementType allTypes[] = {
+        ElementType::Empty, ElementType::Vacuum, ElementType::Solid,
+        ElementType::Solid_Ice, ElementType::Solid_DryIce, ElementType::Solid_Oil,
+        ElementType::Solid_IndestructibleInsulator, ElementType::Gas_O2,
+        ElementType::Gas_Lava, ElementType::Gas_CO2, ElementType::Gas_Oil,
+        ElementType::Liquid_Water, ElementType::Liquid_Lava, ElementType::Liquid_Oil,
+        ElementType::ContaminatedWater, ElementType::Solid_ContaminatedWater
+    };
+    
+    for (ElementType type : allTypes) {
+        const Element& props = ElementTypes::getElement(type);
+        if (props.isLiquid) {
+            liquidTypes.insert(type);
+            std::cout << "[FluidSim] Registered liquid type: " << props.name << std::endl;
+        }
+    }
+    
+    std::cout << "[FluidSim] Total liquid types: " << liquidTypes.size() << std::endl;
 }
 
 bool FluidSim::update(float deltaTime) {
@@ -1062,18 +1089,14 @@ void FluidSim::leakLiquidDiagonally(int x, int y, float deltaTime) {
 }
 
 bool FluidSim::isLiquidType(ElementType type) {
-    return type == ElementType::Liquid_Water || 
-           type == ElementType::Liquid_Lava || 
-           type == ElementType::Liquid_Oil ||
-           type == ElementType::ContaminatedWater;
+    return liquidTypes.count(type) > 0;
 }
 
 bool FluidSim::canDisplace(ElementType fluid, ElementType target) {
     // Liquids can displace gases
-    if (isLiquidType(fluid) &&
-        (target == ElementType::Gas_O2 || target == ElementType::Gas_CO2 || 
-         target == ElementType::Gas_Lava || target == ElementType::Gas_Oil)) {
-        return true;
+    if (isLiquidType(fluid)) {
+        const Element& targetProps = ElementTypes::getElement(target);
+        return targetProps.isGas;
     }
     return false;
 }

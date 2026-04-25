@@ -1,6 +1,8 @@
 #pragma once
 
 #include "SimulationSystem.h"
+#include "ElementTypes.h"
+#include <unordered_set>
 
 // Gas simulation system - handles gas physics
 // Responsible for: pressure calculation, gas accumulation, pressure-based flow, vacuum filling
@@ -16,6 +18,9 @@ public:
     static float getMaxMassForElement(ElementType type);
     
 private:
+    // Initialize gas types dynamically at startup
+    void initializeGasTypes();
+    
     // Gas physics constants
     static constexpr float GAS_CONSTANT = 8.314f;  // J/(mol·K)
     static constexpr float CELL_VOLUME = 0.001f;   // 1 liter per cell (m³)
@@ -33,4 +38,7 @@ private:
     bool isGasType(ElementType type);
     bool isSameGas(ElementType type1, ElementType type2);
     float getMolarMass(ElementType type);
+    
+    // Dynamic gas type cache (populated at startup)
+    std::unordered_set<ElementType> gasTypes;
 };

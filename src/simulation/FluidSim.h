@@ -3,6 +3,7 @@
 #include "SimulationSystem.h"
 #include "ElementTypes.h"
 #include <vector>
+#include <unordered_set>
 
 // Fluid simulation system - handles liquid physics
 // Responsible for: liquid flow, viscosity, density-based movement
@@ -18,6 +19,9 @@ public:
     void setUpdateInterval(float interval) { updateInterval = interval; }
     
 private:
+    // Initialize liquid types dynamically at startup
+    void initializeLiquidTypes();
+    
     // Internal fluid functions
     void updateLiquid(int x, int y);
     void moveLiquidDown(int x, int y);
@@ -28,6 +32,9 @@ private:
     bool isLiquidType(ElementType type);
     bool canDisplace(ElementType fluid, ElementType target);
     bool hasGasEscapeRoute(int x, int y, ElementType gasType);
+    
+    // Dynamic liquid type cache (populated at startup)
+    std::unordered_set<ElementType> liquidTypes;
     
     // Gas displacement queue
     struct DisplacedGas {

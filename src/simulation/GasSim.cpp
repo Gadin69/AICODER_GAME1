@@ -28,6 +28,32 @@ float GasSim::getMaxMassForElement(ElementType type) {
 
 GasSim::GasSim() 
     : SimulationSystem("GasSim", 0.04f) {  // Update every 40ms (faster spreading for visible movement)
+    // Initialize gas types dynamically
+    initializeGasTypes();
+}
+
+void GasSim::initializeGasTypes() {
+    gasTypes.clear();
+    
+    // Iterate through all ElementType values and check if they're gases
+    ElementType allTypes[] = {
+        ElementType::Empty, ElementType::Vacuum, ElementType::Solid,
+        ElementType::Solid_Ice, ElementType::Solid_DryIce, ElementType::Solid_Oil,
+        ElementType::Solid_IndestructibleInsulator, ElementType::Gas_O2,
+        ElementType::Gas_Lava, ElementType::Gas_CO2, ElementType::Gas_Oil,
+        ElementType::Liquid_Water, ElementType::Liquid_Lava, ElementType::Liquid_Oil,
+        ElementType::ContaminatedWater, ElementType::Solid_ContaminatedWater
+    };
+    
+    for (ElementType type : allTypes) {
+        const Element& props = ElementTypes::getElement(type);
+        if (props.isGas) {
+            gasTypes.insert(type);
+            std::cout << "[GasSim] Registered gas type: " << props.name << std::endl;
+        }
+    }
+    
+    std::cout << "[GasSim] Total gas types: " << gasTypes.size() << std::endl;
 }
 
 bool GasSim::update(float deltaTime) {
@@ -1211,7 +1237,7 @@ void GasSim::calculatePressure(int x, int y) {
 }
 
 bool GasSim::isGasType(ElementType type) {
-    return type == ElementType::Gas_O2 || type == ElementType::Gas_CO2 || type == ElementType::Gas_Lava;
+    return gasTypes.count(type) > 0;
 }
 
 bool GasSim::isSameGas(ElementType type1, ElementType type2) {
