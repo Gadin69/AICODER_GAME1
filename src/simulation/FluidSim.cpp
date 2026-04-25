@@ -183,40 +183,6 @@ bool FluidSim::update(float deltaTime) {
                 }
             }
             
-            // PRIORITY 1.5: UP into DIFFERENT LIQUID - rise if lighter (oil floats through water)
-            if (!actedThisTick) {
-                int upY = y - 1;
-                if (grid->isValidPosition(x, upY)) {
-                    Cell& above = grid->getCell(x, upY);
-                    ElementType aboveType = above.elementType;
-                    
-                    if (isLiquidType(aboveType) && aboveType != cell.elementType) {
-                        const Element& cellProps = ElementTypes::getElement(cell.elementType);
-                        const Element& aboveProps = ElementTypes::getElement(aboveType);
-                        
-                        // If this liquid is lighter than the one above, swap (buoyancy)
-                        if (cellProps.density < aboveProps.density) {
-                            if (!isSwapInvolved[y][x] && !isSwapInvolved[upY][x] &&
-                                !isMergeSource[y][x] && !isMergeTarget[y][x]) {
-                                
-                                FlowAction action;
-                                action.fromX = x; action.fromY = y;
-                                action.toX = x; action.toY = upY;
-                                action.massToMove = cellMass;
-                                action.temperature = cell.temperature;
-                                action.type = cell.elementType;
-                                action.isMerge = false;
-                                flowActions.push_back(action);
-                                
-                                isSwapInvolved[y][x] = true;
-                                isSwapInvolved[upY][x] = true;
-                                actedThisTick = true;
-                            }
-                        }
-                    }
-                }
-            }
-            
             // PRIORITY 2: SIDES into VACUUM/GAS (only if blocked from falling OR viscosity prevented fall)
             static constexpr float MIN_SIDEWAY_MASS = 0.1f;  // Minimum mass to spread sideways into empty space
             static constexpr float CONSOLIDATE_THRESHOLD = 0.05f;  // Below this, consolidate (hysteresis gap: 0.05-0.1 prevents oscillation)
