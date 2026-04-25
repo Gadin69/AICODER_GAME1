@@ -215,9 +215,9 @@ bool FluidSim::update(float deltaTime) {
                     }
                     // SIDE into GAS - displace 100% (full swap)
                     else if (canDisplace(cell.elementType, sideType)) {
-                        static constexpr float MAX_GAS_MASS = 10.0f;
+                        float maxGasMass = GasSim::getMaxMassForElement(sideType);
                         
-                        if (sideCell.mass > MAX_GAS_MASS) {
+                        if (sideCell.mass > maxGasMass) {
                             if (!hasGasEscapeRoute(sideX, sideY, sideType)) {
                                 continue;  // Air pocket, skip
                             }

@@ -12,12 +12,15 @@ public:
     bool update(float deltaTime) override;
     void reset() override;
     
+    // Utility: Calculate maximum mass for an element based on density
+    static float getMaxMassForElement(ElementType type);
+    
 private:
     // Gas physics constants
     static constexpr float GAS_CONSTANT = 8.314f;  // J/(mol·K)
     static constexpr float CELL_VOLUME = 0.001f;   // 1 liter per cell (m³)
     static constexpr float MIN_GAS_MASS = 0.001f;  // kg - minimum to keep gas cell
-    static constexpr float MAX_GAS_MASS = 10.0f;   // kg - max before compression
+    static constexpr float GAS_COMPRESSION_MULTIPLIER = 10000.0f;  // Compression ratio for gases
     
     // Internal gas functions
     void calculatePressure(int x, int y);

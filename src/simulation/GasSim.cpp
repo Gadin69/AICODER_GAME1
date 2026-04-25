@@ -15,6 +15,17 @@
     } \
 } while(0)
 
+// Utility: Calculate maximum mass for an element based on density
+float GasSim::getMaxMassForElement(ElementType type) {
+    const Element& props = ElementTypes::getElement(type);
+    if (props.isGas) {
+        return props.density * CELL_VOLUME * GAS_COMPRESSION_MULTIPLIER;
+    } else if (props.isLiquid) {
+        return props.density * CELL_VOLUME;  // No compression for liquids
+    }
+    return 0.0f;  // Solids don't have mass limits
+}
+
 GasSim::GasSim() 
     : SimulationSystem("GasSim", 0.04f) {  // Update every 40ms (faster spreading for visible movement)
 }
@@ -165,7 +176,8 @@ bool GasSim::update(float deltaTime) {
             float currentMass = gasSnapshot[y][x].mass;
             float currentPressure = gasSnapshot[y][x].pressure;
             
-            if (currentMass > MAX_GAS_MASS) {
+            float maxMass = getMaxMassForElement(gasSnapshot[y][x].type);
+            if (currentMass > maxMass) {
                 totalOvermassCellsFound++;
             }
             
@@ -183,8 +195,8 @@ bool GasSim::update(float deltaTime) {
             
             // CRITICAL FIX: Check LIVE grid for over-mass gas (may have been merged by FluidSim)
             Cell& liveCell = grid->getCell(x, y);
-            bool hasLiveOvermass = isGasType(liveCell.elementType) && liveCell.mass > MAX_GAS_MASS;
-            bool hasSnapshotOvermass = currentMass > MAX_GAS_MASS;
+            bool hasLiveOvermass = isGasType(liveCell.elementType) && liveCell.mass > getMaxMassForElement(liveCell.elementType);
+            bool hasSnapshotOvermass = currentMass > maxMass;
             
             if (isGasType(liveCell.elementType) && liveCell.mass > currentMass) {
                 // FluidSim merged gas into this cell - use live mass instead
@@ -218,7 +230,7 @@ bool GasSim::update(float deltaTime) {
             // PERFORMANCE OPTIMIZATION: Only expand (spread mass) if over max capacity
             // Gas cells at or below max mass skip expensive spreading calculation
             // They will still float and merge in STEP 4
-            if (currentMass > MAX_GAS_MASS) {
+            if (currentMass > maxMass) {
                 // DEBUG: Track over-compressed gas
                 static int overmassDebugCount = 0;
                 overmassDebugCount++;
@@ -488,7 +500,8 @@ bool GasSim::update(float deltaTime) {
                 bool movedUpward = false;
                 
                 // Only allow upward movement for non-over-mass cells
-                if (cellMass <= MAX_GAS_MASS) {
+                float maxMass = getMaxMassForElement(cell.elementType);
+                if (cellMass <= maxMass) {
                 
                 // Small chance to try sideways movement instead of upward (natural spreading)
                 static unsigned int lateralMoveSeed = 77777;
@@ -601,7 +614,7 @@ bool GasSim::update(float deltaTime) {
                         }
                     }
                 }  // End if (!movedUpward)
-                }  // End if cellMass <= MAX_GAS_MASS (STEP 1)
+                }  // End if cellMass <= maxMass (STEP 1)
                 
                 if (movedUpward) continue;
                 
@@ -624,7 +637,8 @@ bool GasSim::update(float deltaTime) {
                 bool mergedUpward = false;
                 
                 // Skip upward merge if cell is over-mass (let STEP 5 handle downward expansion)
-                if (cellMass <= MAX_GAS_MASS) {
+                float maxMass2 = getMaxMassForElement(cell.elementType);
+                if (cellMass <= maxMass2) {
                     for (int i = 0; i < upDirCount; i++) {
                         int nx = x + upDirections[i][0];
                         int ny = y + upDirections[i][1];
@@ -639,7 +653,8 @@ bool GasSim::update(float deltaTime) {
                         }
                         
                         // Merge if neighbor has space
-                        if (neighbor.mass < MAX_GAS_MASS) {
+                        float neighborMaxMass = getMaxMassForElement(neighbor.elementType);
+                        if (neighbor.mass < neighborMaxMass) {
                             // RESERVE PARTNER FIRST
                             if (isMergeSource[y][x] || isMergeTarget[y][x] || 
                                 isMergeSource[ny][nx] || isMergeTarget[ny][nx]) {
@@ -647,7 +662,7 @@ bool GasSim::update(float deltaTime) {
                             }
                             
                             // Transfer enough to fill target or empty source
-                            float spaceAvailable = MAX_GAS_MASS - neighbor.mass;
+                            float spaceAvailable = neighborMaxMass - neighbor.mass;
                             float transferAmount = std::min(cellMass, spaceAvailable);
                             
                             if (transferAmount > 0) {
@@ -670,7 +685,7 @@ bool GasSim::update(float deltaTime) {
                             }
                         }
                     }  // End for loop
-                }  // End if cellMass <= MAX_GAS_MASS
+                }  // End if cellMass <= maxMass2
                 
                 if (mergedUpward) continue;
                 
@@ -692,12 +707,13 @@ bool GasSim::update(float deltaTime) {
                     }
                     
                     // Low-to-high merge: only if neighbor has MORE mass
-                    if (neighbor.mass > cellMass && neighbor.mass < MAX_GAS_MASS) {
+                    float neighborMaxMass2 = getMaxMassForElement(neighbor.elementType);
+                    if (neighbor.mass > cellMass && neighbor.mass < neighborMaxMass2) {
                         // RESERVE PARTNER
                         if (!isMergeSource[y][x] && !isMergeTarget[y][x] && 
                             !isMergeSource[ny][nx] && !isMergeTarget[ny][nx]) {
                             
-                            float spaceAvailable = MAX_GAS_MASS - neighbor.mass;
+                            float spaceAvailable = neighborMaxMass2 - neighbor.mass;
                             float transferAmount = std::min(cellMass, spaceAvailable);
                             
                             if (transferAmount > 0) {
@@ -725,10 +741,11 @@ bool GasSim::update(float deltaTime) {
                 if (mergedSideways) continue;
                 
                 // ============ STEP 5: OVER-MASS GAS EXPANDS IN ALL 8 DIRECTIONS ============
-                // When gas is compressed beyond MAX_GAS_MASS, distribute excess mass to ALL
+                // When gas is compressed beyond its max capacity, distribute excess mass to ALL
                 // available neighbors (vacuum or same gas), prioritizing downward directions.
-                if (cellMass > MAX_GAS_MASS) {
-                    float excessMass = cellMass - MAX_GAS_MASS;
+                float maxMass3 = getMaxMassForElement(cell.elementType);
+                if (cellMass > maxMass3) {
+                    float excessMass = cellMass - maxMass3;
                     float remainingExcess = excessMass;
                     
                     // Define all 8 directions in priority order: DOWN(3), SIDES(2), UP(3)
@@ -765,9 +782,10 @@ bool GasSim::update(float deltaTime) {
                         if (neighbor.elementType == ElementType::Vacuum) {
                             availableNeighbors.push_back({nx, ny, true, false, 999999.0f});
                         } else if (isGasType(neighbor.elementType) && neighbor.elementType == cell.elementType) {
-                            // For same gas, calculate how much space (allow exceeding MAX for cascade)
-                            float space = std::max(0.0f, neighbor.mass < MAX_GAS_MASS ? 
-                                                  (MAX_GAS_MASS - neighbor.mass) : excessMass);
+                            // For same gas, calculate how much space (allow exceeding max for cascade)
+                            float neighborMaxMass4 = getMaxMassForElement(neighbor.elementType);
+                            float space = std::max(0.0f, neighbor.mass < neighborMaxMass4 ? 
+                                                  (neighborMaxMass4 - neighbor.mass) : excessMass);
                             availableNeighbors.push_back({nx, ny, false, true, space});
                         }
                     }
@@ -801,7 +819,7 @@ bool GasSim::update(float deltaTime) {
                         if (overmassDebugCount < 10) {
                             std::cerr << "[GAS EXPAND] Over-mass (" << cellMass << "kg) distributing " 
                                       << excessMass << "kg to " << availableNeighbors.size() 
-                                      << " neighbors, keeping " << MAX_GAS_MASS << "kg" << std::endl;
+                                      << " neighbors, keeping " << maxMass3 << "kg" << std::endl;
                             overmassDebugCount++;
                         }
                     }
@@ -899,8 +917,9 @@ bool GasSim::update(float deltaTime) {
                     massToMerge = action.massToMove;
                     leftover = 0.0f;
                 } else {
-                    // Regular merge: respect MAX_GAS_MASS limit
-                    float spaceAvailable = MAX_GAS_MASS - toCell.mass;
+                    // Regular merge: respect max mass limit
+                    float targetMaxMass = getMaxMassForElement(toCell.elementType);
+                    float spaceAvailable = targetMaxMass - toCell.mass;
                     massToMerge = std::min(action.massToMove, spaceAvailable);
                     leftover = action.massToMove - massToMerge;
                 }
@@ -931,8 +950,9 @@ bool GasSim::update(float deltaTime) {
                 
                 // Handle leftover in source cell
                 if (action.isOvermassExpansion) {
-                    // Over-mass expansion: source should keep MAX_GAS_MASS
-                    fromCell.mass = MAX_GAS_MASS;
+                    // Over-mass expansion: source should keep its max mass
+                    float sourceMaxMass = getMaxMassForElement(fromCell.elementType);
+                    fromCell.mass = sourceMaxMass;
                     fromCell.updated = true;
                     fromCell.updateColor();
                     calculatePressure(action.fromX, action.fromY);
