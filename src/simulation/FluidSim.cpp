@@ -58,238 +58,277 @@ bool FluidSim::update(float deltaTime) {
             float cellMass = cell.mass;
             const Element& props = ElementTypes::getElement(cell.elementType);
             
-            // VISCOSITY-BASED FLOW RATE (only applies to MERGE operations)
-            // Low viscosity (water=1.0) = fast merge, High viscosity (honey=100) = slow merge
-            // Flow rate = portion of mass that can MERGE per tick
-            float flowRate = 1.0f / (1.0f + props.viscosity * 0.1f);  // 0.0 to 1.0
-            float massToMerge = cellMass * flowRate;  // Only for merge operations
+            // ORDERED PRIORITY FLOW (prevents mass duplication):
+            // 1. MERGE DOWN into same liquid (fill from bottom)
+            // 2. Fall into vacuum/gas below
+            // 3. Spread sideways into vacuum/gas or equalize with same-liquid neighbors
             
-            // ALL liquid cells flow regardless of mass - no minimum threshold
+            // PRIORITY 1: MERGE DOWN into same liquid (fill cell below to max)
+            int downX = x;
+            int downY = y + 1;
+            bool actedThisTick = false;
             
-            // PRIORITY ORDER: DOWN, DOWN-DIAGONAL (random), SIDEWAYS (random)
-            // Total: 5 directions
-            int directions[5][2];
-            int dirCount = 0;
-            
-            // DOWN first (gravity - liquids MUST fall)
-            directions[dirCount][0] = 0; directions[dirCount][1] = 1; dirCount++;
-            
-            // DOWN-DIAGONAL (randomize left/right)
-            if (simpleRand() % 2 == 0) {
-                directions[dirCount][0] = -1; directions[dirCount][1] = 1; dirCount++;
-                directions[dirCount][0] = 1; directions[dirCount][1] = 1; dirCount++;
-            } else {
-                directions[dirCount][0] = 1; directions[dirCount][1] = 1; dirCount++;
-                directions[dirCount][0] = -1; directions[dirCount][1] = 1; dirCount++;
-            }
-            
-            // SIDEWAYS (randomize left/right)
-            if (simpleRand() % 2 == 0) {
-                directions[dirCount][0] = -1; directions[dirCount][1] = 0; dirCount++;
-                directions[dirCount][0] = 1; directions[dirCount][1] = 0; dirCount++;
-            } else {
-                directions[dirCount][0] = 1; directions[dirCount][1] = 0; dirCount++;
-                directions[dirCount][0] = -1; directions[dirCount][1] = 0; dirCount++;
-            }
-            
-            // Try each direction in priority order
-            // CRITICAL FIX: Track how much mass we've actually moved
-            float massMoved = 0.0f;
-            float remainingMergeMass = massToMerge;  // Only limits merge operations
-            
-            for (int i = 0; i < dirCount && (remainingMergeMass > 0.001f || massMoved == 0.0f); i++) {
-                int nx = x + directions[i][0];
-                int ny = y + directions[i][1];
-                
-                if (!grid->isValidPosition(nx, ny)) continue;
-                
-                Cell& neighbor = grid->getCell(nx, ny);
-                ElementType neighborType = neighbor.elementType;
-                
-                bool isVacuum = (neighborType == ElementType::Vacuum);
-                bool isSameLiquid = isLiquidType(neighborType) && neighborType == cell.elementType;
-                bool isDifferentLiquid = isLiquidType(neighborType) && neighborType != cell.elementType;
-                bool isDisplaceableGas = canDisplace(cell.elementType, neighborType);
+            if (grid->isValidPosition(downX, downY) && !actedThisTick) {
+                Cell& below = grid->getCell(downX, downY);
+                ElementType belowType = below.elementType;
                 
                 FlowAction action;
                 action.fromX = x; action.fromY = y;
-                action.toX = nx; action.toY = ny;
+                action.toX = downX; action.toY = downY;
                 action.massToMove = 0.0f;
                 action.temperature = cell.temperature;
                 action.type = cell.elementType;
                 action.isMerge = false;
                 
-                if (isVacuum) {
-                    // VACUUM: Move entire cell into vacuum
-                    // Check if either cell is already involved
-                    if (isSwapInvolved[y][x] || isSwapInvolved[ny][nx] ||
-                        isMergeSource[y][x] || isMergeTarget[y][x]) {
-                        continue;  // Skip, already reserved
+                // DOWN into SAME LIQUID - merge to fill up
+                if (isLiquidType(belowType) && belowType == cell.elementType) {
+                    if (!isMergeSource[y][x] && !isMergeTarget[y][x] &&
+                        !isMergeSource[downY][downX] && !isMergeTarget[downY][downX]) {
+                        float spaceAvailable = 1000.0f - below.mass;
+                        float mergeAmount = std::min(cellMass, spaceAvailable);
+                        
+                        if (mergeAmount >= 0.001f) {
+                            action.massToMove = mergeAmount;
+                            action.isMerge = true;
+                            flowActions.push_back(action);
+                            
+                            isMergeSource[y][x] = true;
+                            isMergeTarget[downY][downX] = true;
+                            actedThisTick = true;
+                        }
                     }
-                    
-                    // CRITICAL FIX: Move ALL mass, not partial
-                    action.massToMove = cellMass;  // Move entire mass
-                    action.isMerge = false;  // Will swap/move
-                    flowActions.push_back(action);
-                    
-                    // Mark as reserved
-                    isSwapInvolved[y][x] = true;
-                    isSwapInvolved[ny][nx] = true;
-                    
-                    massMoved = cellMass;
-                    break;  // Cell fully moved, stop processing
                 }
-                else if (isSameLiquid) {
-                    // SAME LIQUID: Merge based on viscosity
-                    // Check if cells are available for merge
-                    if (isMergeSource[y][x] || isMergeTarget[y][x] || 
-                        isMergeSource[ny][nx] || isMergeTarget[ny][nx] ||
-                        isSwapInvolved[y][x] || isSwapInvolved[ny][nx]) {
-                        continue;  // Skip, already reserved
-                    }
-                    
-                    float spaceAvailable = 2.0f - neighbor.mass;  // 2kg max
-                    float mergeAmount = std::min(remainingMergeMass, spaceAvailable);
-                    
-                    if (mergeAmount >= 0.001f) {
-                        action.massToMove = mergeAmount;
+                // DOWN into VACUUM - leak 10% of mass (natural falling)
+                else if (belowType == ElementType::Vacuum) {
+                    if (!isMergeSource[y][x] && !isMergeTarget[y][x] &&
+                        !isMergeSource[downY][downX] && !isMergeTarget[downY][downX]) {
+                        // Convert vacuum to liquid type with source temperature
+                        below.elementType = cell.elementType;
+                        below.temperature = cell.temperature;  // Prevent super-cooling
+                        
+                        action.massToMove = cellMass * 0.1f;
                         action.isMerge = true;
                         flowActions.push_back(action);
                         
-                        // Mark as reserved
                         isMergeSource[y][x] = true;
-                        isMergeTarget[ny][nx] = true;
-                        
-                        remainingMergeMass -= mergeAmount;
-                        massMoved += mergeAmount;
-                        // Don't break - can split mass to multiple neighbors
+                        isMergeTarget[downY][downX] = true;
+                        actedThisTick = true;
                     }
                 }
-                else if (isDifferentLiquid) {
-                    // DIFFERENT LIQUID: Swap based on density
-                    // Check if cells are available
-                    if (isSwapInvolved[y][x] || isSwapInvolved[ny][nx] ||
-                        isMergeSource[y][x] || isMergeTarget[y][x] ||
-                        isMergeSource[ny][nx] || isMergeTarget[ny][nx]) {
-                        continue;  // Skip, already reserved
-                    }
-                    
-                    const Element& cellProps = ElementTypes::getElement(cell.elementType);
-                    const Element& neighborProps = ElementTypes::getElement(neighborType);
-                    
-                    // Denser liquid sinks through lighter liquid
-                    if (cellProps.density > neighborProps.density) {
-                        // CRITICAL FIX: Swap entire mass
-                        action.massToMove = cellMass;  // Swap all mass
-                        action.isMerge = false;  // Swap
-                        flowActions.push_back(action);
-                        
-                        // Mark as reserved
-                        isSwapInvolved[y][x] = true;
-                        isSwapInvolved[ny][nx] = true;
-                        
-                        massMoved = cellMass;
-                        break;
-                    }
-                }
-                else if (isDisplaceableGas) {
-                    // GAS: Check if swap is possible or need displacement queue
-                    bool isMovingDown = (directions[i][1] > 0);  // dy > 0 means moving down
-                    bool gasAtBottomEdge = (ny >= height - 1);  // Can't swap if gas at bottom
-                    bool canSwap = isMovingDown && !gasAtBottomEdge;
-                    
-                    if (canSwap) {
-                        // MOVING DOWN and gas NOT at bottom: SWAP (bubble/droplet effect)
-                        // Check if cells are available
-                        if (isSwapInvolved[y][x] || isSwapInvolved[ny][nx] ||
-                            isMergeSource[y][x] || isMergeTarget[y][x] ||
-                            isMergeSource[ny][nx] || isMergeTarget[ny][nx]) {
-                            continue;  // Skip, already reserved
-                        }
-                        
-                        // SWAP - gas goes up, liquid goes down
+                // DOWN into GAS - swap
+                else if (canDisplace(cell.elementType, belowType)) {
+                    if (!isSwapInvolved[y][x] && !isSwapInvolved[downY][downX] &&
+                        !isMergeSource[y][x] && !isMergeTarget[y][x]) {
                         action.massToMove = cellMass;
                         action.isMerge = false;
-                        action.overwriteGas = false;  // This is a SWAP, not overwrite
+                        action.overwriteGas = false;
                         flowActions.push_back(action);
                         
-                        // Mark as reserved
                         isSwapInvolved[y][x] = true;
-                        isSwapInvolved[ny][nx] = true;
-                        
-                        massMoved = cellMass;
-                        break;
-                    } else {
-                        // Either moving sideways OR gas at bottom edge: Use displacement queue
-                        static constexpr float MAX_GAS_MASS = 10.0f;
-                        
-                        if (neighbor.mass > MAX_GAS_MASS) {
-                            // Pressurized gas - check if it has escape route
-                            if (!hasGasEscapeRoute(nx, ny, neighbor.elementType)) {
-                                // Air pocket - liquid cannot displace
-                                continue;
-                            }
+                        isSwapInvolved[downY][downX] = true;
+                        actedThisTick = true;
+                    }
+                }
+                // DOWN into DIFFERENT LIQUID - swap if denser
+                else if (isLiquidType(belowType) && belowType != cell.elementType) {
+                    const Element& cellProps = ElementTypes::getElement(cell.elementType);
+                    const Element& belowProps = ElementTypes::getElement(belowType);
+                    
+                    if (cellProps.density > belowProps.density) {
+                        if (!isSwapInvolved[y][x] && !isSwapInvolved[downY][downX] &&
+                            !isMergeSource[y][x] && !isMergeTarget[y][x]) {
+                            action.massToMove = cellMass;
+                            action.isMerge = false;
+                            flowActions.push_back(action);
+                            
+                            isSwapInvolved[y][x] = true;
+                            isSwapInvolved[downY][downX] = true;
+                            actedThisTick = true;
                         }
-                        
-                        // Check if cells are available
-                        if (isSwapInvolved[y][x] || isSwapInvolved[ny][nx] ||
-                            isMergeSource[y][x] || isMergeTarget[y][x] ||
-                            isMergeSource[ny][nx] || isMergeTarget[ny][nx]) {
-                            continue;  // Skip, already reserved
-                        }
-                        
-                        // VISCOSITY-BASED PARTIAL MASS TRANSFER
-                        // High viscosity (lava) = moves slowly, transfers small amount
-                        // Low viscosity (water) = moves quickly, transfers most mass
-                        float flowRate = 1.0f / (1.0f + props.viscosity * 0.1f);
-                        float viscosityMassTransfer = cellMass * flowRate;
-                        
-                        // Only transfer if there's meaningful mass to move
-                        if (viscosityMassTransfer < 0.001f) {
-                            continue;
-                        }
-                        
-                        // Queue gas for displacement (will be processed at end of tick)
-                        DisplacedGas displaced;
-                        displaced.x = nx;
-                        displaced.y = ny;
-                        displaced.mass = neighbor.mass;
-                        displaced.temperature = neighbor.temperature;
-                        displaced.type = neighbor.elementType;
-                        displacedGasQueue.push_back(displaced);
-                        
-                        // Liquid OVERWRITES gas with viscosity-based mass (not full swap)
-                        action.massToMove = viscosityMassTransfer;
-                        action.isMerge = false;
-                        action.overwriteGas = true;  // Special flag for gas displacement
-                        flowActions.push_back(action);
-                        
-                        // Mark as reserved
-                        isSwapInvolved[y][x] = true;
-                        isSwapInvolved[ny][nx] = true;
-                        
-                        massMoved = viscosityMassTransfer;
-                        remainingMergeMass -= viscosityMassTransfer;
-                        // Don't break - liquid can flow to multiple gas cells based on viscosity
                     }
                 }
             }
             
-            // CRITICAL FIX: Handle leftover mass
-            // If cell moved >99% of mass, convert remainder to vacuum to prevent micro-cells
-            float massRemaining = cellMass - massMoved;
-            if (massMoved > 0.0f && massRemaining > 0.0f && massRemaining < cellMass * 0.01f) {
-                // Cell moved almost all mass (>99%), convert leftover to vacuum
-                FlowAction cleanupAction;
-                cleanupAction.fromX = x;
-                cleanupAction.fromY = y;
-                cleanupAction.toX = x;  // Same cell - just mark for cleanup
-                cleanupAction.toY = y;
-                cleanupAction.massToMove = massRemaining;
-                cleanupAction.isMerge = false;
-                cleanupAction.type = ElementType::Vacuum;  // Special marker
-                cleanupAction.temperature = -273.15f;
-                flowActions.push_back(cleanupAction);
+            // PRIORITY 2: SIDES into VACUUM/GAS (only if didn't fall down AND has enough mass)
+            static constexpr float MIN_SIDEWAY_MASS = 0.1f;  // Minimum mass to spread sideways into empty space
+            static constexpr float CONSOLIDATE_THRESHOLD = 0.05f;  // Below this, consolidate (hysteresis gap: 0.05-0.1 prevents oscillation)
+            if (!actedThisTick && cellMass >= MIN_SIDEWAY_MASS) {
+                int sideDirs[2] = {-1, 1};  // LEFT, RIGHT
+                for (int side = 0; side < 2 && !actedThisTick; side++) {
+                    int sideX = x + sideDirs[side];
+                    int sideY = y;
+                    
+                    if (!grid->isValidPosition(sideX, sideY)) continue;
+                    
+                    Cell& sideCell = grid->getCell(sideX, sideY);
+                    ElementType sideType = sideCell.elementType;
+                    
+                    FlowAction action;
+                    action.fromX = x; action.fromY = y;
+                    action.toX = sideX; action.toY = sideY;
+                    action.massToMove = 0.0f;
+                    action.temperature = cell.temperature;
+                    action.type = cell.elementType;
+                    action.isMerge = false;
+                    
+                    // SIDE into VACUUM - leak 10% of mass (natural spreading)
+                    if (sideType == ElementType::Vacuum) {
+                        if (!isMergeSource[y][x] && !isMergeTarget[y][x] &&
+                            !isMergeSource[sideY][sideX] && !isMergeTarget[sideY][sideX]) {
+                            // Convert vacuum to liquid type with source temperature
+                            sideCell.elementType = cell.elementType;
+                            sideCell.temperature = cell.temperature;  // Prevent super-cooling
+                            
+                            action.massToMove = cellMass * 0.1f;
+                            action.isMerge = true;
+                            flowActions.push_back(action);
+                            
+                            isMergeSource[y][x] = true;
+                            isMergeTarget[sideY][sideX] = true;
+                            actedThisTick = true;
+                        }
+                    }
+                    // SIDE into GAS - displace 100% (full swap)
+                    else if (canDisplace(cell.elementType, sideType)) {
+                        static constexpr float MAX_GAS_MASS = 10.0f;
+                        
+                        if (sideCell.mass > MAX_GAS_MASS) {
+                            if (!hasGasEscapeRoute(sideX, sideY, sideType)) {
+                                continue;  // Air pocket, skip
+                            }
+                        }
+                        
+                        if (!isSwapInvolved[y][x] && !isSwapInvolved[sideY][sideX] &&
+                            !isMergeSource[y][x] && !isMergeTarget[y][x]) {
+                            // Queue gas for displacement
+                            DisplacedGas displaced;
+                            displaced.x = sideX;
+                            displaced.y = sideY;
+                            displaced.mass = sideCell.mass;
+                            displaced.temperature = sideCell.temperature;
+                            displaced.type = sideType;
+                            displacedGasQueue.push_back(displaced);
+                            
+                            action.massToMove = cellMass;
+                            action.isMerge = false;
+                            action.overwriteGas = true;
+                            flowActions.push_back(action);
+                            
+                            isSwapInvolved[y][x] = true;
+                            isSwapInvolved[sideY][sideX] = true;
+                            actedThisTick = true;
+                        }
+                    }
+                }
+            }
+            
+            // PRIORITY 3: EQUALIZE with same-liquid neighbors (only if blocked from falling/spreading)
+            // Small droplets CAN merge into same liquid regardless of mass
+            if (!actedThisTick) {
+                int sideDirs[2] = {-1, 1};  // LEFT, RIGHT
+                for (int side = 0; side < 2 && !actedThisTick; side++) {
+                    int sideX = x + sideDirs[side];
+                    int sideY = y;
+                    
+                    if (!grid->isValidPosition(sideX, sideY)) continue;
+                    
+                    Cell& sideCell = grid->getCell(sideX, sideY);
+                    
+                    // Only equalize with SAME liquid type
+                    if (!isLiquidType(sideCell.elementType) || sideCell.elementType != cell.elementType) {
+                        continue;
+                    }
+                    
+                    // Don't equalize if BOTH cells are in hysteresis gap (prevents oscillation)
+                    if (cellMass >= CONSOLIDATE_THRESHOLD && cellMass < MIN_SIDEWAY_MASS &&
+                        sideCell.mass >= CONSOLIDATE_THRESHOLD && sideCell.mass < MIN_SIDEWAY_MASS) {
+                        continue;
+                    }
+                    
+                    // Only give mass to neighbor with LESS mass
+                    if (sideCell.mass >= cell.mass) {
+                        continue;
+                    }
+                    
+                    // Check reservation
+                    if (isMergeSource[y][x] || isMergeTarget[y][x] ||
+                        isMergeSource[sideY][sideX] || isMergeTarget[sideY][sideX] ||
+                        isSwapInvolved[y][x] || isSwapInvolved[sideY][sideX]) {
+                        continue;
+                    }
+                    
+                    float spaceAvailable = 1000.0f - sideCell.mass;
+                    float mergeAmount = std::min(cellMass * 0.1f, spaceAvailable);  // Give 10% or fill space
+                    
+                    if (mergeAmount >= 0.001f) {
+                        FlowAction action;
+                        action.fromX = x; action.fromY = y;
+                        action.toX = sideX; action.toY = sideY;
+                        action.massToMove = mergeAmount;
+                        action.temperature = cell.temperature;
+                        action.type = cell.elementType;
+                        action.isMerge = true;
+                        flowActions.push_back(action);
+                        
+                        isMergeSource[y][x] = true;
+                        isMergeTarget[sideY][sideX] = true;
+                        actedThisTick = true;
+                    }
+                }
+            }
+            
+            // PRIORITY 4: CONSOLIDATE - Small droplets (< 0.05kg) move ALL mass into higher-mass neighbor
+            // Hysteresis gap (0.05-0.1kg) prevents oscillation between spreading and consolidating
+            if (!actedThisTick && cellMass < CONSOLIDATE_THRESHOLD && cellMass > 0.001f) {
+                int sideDirs[2] = {-1, 1};  // LEFT, RIGHT
+                
+                // Find neighbor with HIGHEST mass to consolidate into (sideways only)
+                // Downward consolidation already handled by Priority 1 (merge down)
+                int bestX = -1, bestY = -1;
+                float highestMass = cellMass;
+                
+                for (int side = 0; side < 2; side++) {
+                    int sideX = x + sideDirs[side];
+                    int sideY = y;
+                    
+                    if (!grid->isValidPosition(sideX, sideY)) continue;
+                    
+                    Cell& sideCell = grid->getCell(sideX, sideY);
+                    
+                    // Only consolidate into same liquid with MORE mass
+                    if (isLiquidType(sideCell.elementType) && 
+                        sideCell.elementType == cell.elementType && 
+                        sideCell.mass > highestMass) {
+                        highestMass = sideCell.mass;
+                        bestX = sideX;
+                        bestY = sideY;
+                    }
+                }
+                
+                // If found a higher-mass neighbor, move ALL mass into it
+                if (bestX != -1 && bestY != -1) {
+                    if (!isMergeSource[y][x] && !isMergeTarget[y][x] &&
+                        !isMergeSource[bestY][bestX] && !isMergeTarget[bestY][bestX]) {
+                        
+                        float spaceAvailable = 1000.0f - grid->getCell(bestX, bestY).mass;
+                        float mergeAmount = std::min(cellMass, spaceAvailable);
+                        
+                        if (mergeAmount >= 0.001f) {
+                            FlowAction action;
+                            action.fromX = x; action.fromY = y;
+                            action.toX = bestX; action.toY = bestY;
+                            action.massToMove = mergeAmount;
+                            action.temperature = cell.temperature;
+                            action.type = cell.elementType;
+                            action.isMerge = true;
+                            flowActions.push_back(action);
+                            
+                            isMergeSource[y][x] = true;
+                            isMergeTarget[bestY][bestX] = true;
+                            actedThisTick = true;
+                        }
+                    }
+                }
             }
         }
     }
@@ -330,6 +369,9 @@ bool FluidSim::update(float deltaTime) {
                 if (!isLiquidType(cell.elementType)) continue;
                 if (cell.mass < 0.01f) continue;  // Skip near-empty cells
                 
+                ElementType liquidType = cell.elementType;
+                float cellMass = cell.mass;
+                
                 // CRITICAL: Only level if cell is blocked from moving downward
                 // Check if below cell is NOT vacuum (blocked by liquid, solid, or gas)
                 bool canMoveDown = false;
@@ -362,9 +404,6 @@ bool FluidSim::update(float deltaTime) {
                 
                 // Random chance to spread (~10% per tick = ~1 second at 10 ticks/sec)
                 if (levelRand() >= 10) continue;
-                
-                ElementType liquidType = cell.elementType;
-                float cellMass = cell.mass;
                 
                 // Try to spread LEFT and RIGHT
                 int directions[2] = {-1, 1};  // LEFT, RIGHT
@@ -475,10 +514,13 @@ bool FluidSim::update(float deltaTime) {
         
         if (action.isMerge) {
             // MERGE: Add mass to target (WITH CAP CHECK to prevent overflow)
-            float spaceAvailable = 2.0f - toCell.mass;  // 2kg max per cell
-            float actualMergeAmount = std::min(action.massToMove, spaceAvailable);
+            float spaceAvailable = 1000.0f - toCell.mass;  // 1000kg max per cell (1 cubic meter of water)
             
-            // If no space, skip this merge (mass stays in source)
+            // CRITICAL: Cap by ACTUAL source mass at application time
+            // (source may have already sent mass in previous actions this tick)
+            float actualMergeAmount = std::min({action.massToMove, spaceAvailable, fromCell.mass});
+            
+            // If no space or no mass, skip this merge (mass stays in source)
             if (actualMergeAmount < 0.001f) {
                 continue;
             }
