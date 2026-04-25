@@ -7,6 +7,7 @@ VacuumElement ElementTypes::vacuumInstance;
 RockElement ElementTypes::solidInstance;
 IceElement ElementTypes::iceInstance;
 DryIceElement ElementTypes::dryIceInstance;
+IndestructibleInsulatorElement ElementTypes::indestructibleInsulatorInstance;
 SteamElement ElementTypes::gasO2Instance;
 Gas_LavaElement ElementTypes::gasLavaInstance;
 CO2Element ElementTypes::gasCO2Instance;
@@ -27,6 +28,8 @@ const Element& ElementTypes::getElement(ElementType type) {
             return iceInstance;
         case ElementType::Solid_DryIce:
             return dryIceInstance;
+        case ElementType::Solid_IndestructibleInsulator:
+            return indestructibleInsulatorInstance;
         case ElementType::Gas_O2:
             return gasO2Instance;
         case ElementType::Gas_Lava:
