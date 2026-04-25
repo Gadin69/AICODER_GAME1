@@ -19,4 +19,7 @@ public:
     VacuumElement() : Element("Vacuum", 0.0f, -273.15f, 0.0f, 0.0f, 0.0f, 0.0f,
                               0.0f, 0.0f, false, false, false, false,
                               0.0f, 0.0f, 0.0f, 0.0f, 0.0f) {}  // Zero heat transfer!
+    
+    // Override: Vacuum cannot transfer heat
+    bool canTransferHeat() const override { return false; }
 };
