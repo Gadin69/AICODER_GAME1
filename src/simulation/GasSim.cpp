@@ -567,6 +567,38 @@ bool GasSim::update(float deltaTime) {
                             movedUpward = true;
                             break;  // Done with this cell
                         }
+                        // GAS BUOYANCY: If neighbor is a heavier gas, swap with it
+                        else if (isGasType(neighbor.elementType) && neighbor.elementType != cell.elementType) {
+                            const Element& cellProps = ElementTypes::getElement(cell.elementType);
+                            const Element& neighborProps = ElementTypes::getElement(neighbor.elementType);
+                            
+                            // If this gas is lighter than the neighbor above, swap (buoyancy)
+                            if (cellProps.density < neighborProps.density) {
+                                // Check if either cell is already involved
+                                if (isSwapInvolved[y][x] || isSwapInvolved[ny][nx] ||
+                                    isMergeSource[y][x] || isMergeTarget[y][x] ||
+                                    isMergeSource[ny][nx] || isMergeTarget[ny][nx]) {
+                                    continue;  // Skip, already reserved
+                                }
+                                
+                                FlowAction action;
+                                action.fromX = x; action.fromY = y;
+                                action.toX = nx; action.toY = ny;
+                                action.massToMove = cellMass;
+                                action.temperature = cell.temperature;
+                                action.type = cell.elementType;
+                                action.isMerge = false;  // SWAP
+                                action.isOvermassExpansion = false;
+                                flowActions.push_back(action);
+                                
+                                // Mark as reserved
+                                isSwapInvolved[y][x] = true;
+                                isSwapInvolved[ny][nx] = true;
+                                
+                                movedUpward = true;
+                                break;  // Done with this cell
+                            }
+                        }
                     }
                 }  // End if (!movedUpward)
                 }  // End if cellMass <= MAX_GAS_MASS (STEP 1)
@@ -884,6 +916,7 @@ bool GasSim::update(float deltaTime) {
                 // CRITICAL: If target is vacuum, convert it to gas type first
                 if (toCell.elementType == ElementType::Vacuum && massToMerge > 0.0f) {
                     toCell.elementType = action.type;
+                    toCell.temperature = action.temperature;  // Prevent vacuum's -273.15°C from contaminating merge
                 }
                 
                 // Mass-weighted temperature average
