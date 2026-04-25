@@ -12,6 +12,12 @@ public:
         334000.0f, 2260000.0f,
         0.001f, 0.00021f, 1.0f, 0.0f, 100.0f
     ) {}
+    
+    ElementType getPhaseAtTemperature(float temp) const override {
+        if (temp <= freezingPoint) return ElementType::Solid_Ice;
+        if (temp >= boilingPoint) return ElementType::Gas_O2;
+        return ElementType::Empty;  // No change
+    }
 };
 
 // ============================================================================
@@ -24,6 +30,12 @@ public:
         400000.0f, 6000000.0f,
         50.0f, 0.00003f, 2.0f, 700.0f, 3000.0f, 0.0f, 3000.0f
     ) {}
+    
+    ElementType getPhaseAtTemperature(float temp) const override {
+        if (temp <= freezingPoint) return ElementType::Solid;
+        if (temp >= boilingPoint) return ElementType::Gas_Lava;
+        return ElementType::Empty;
+    }
 };
 
 // ============================================================================
@@ -36,4 +48,10 @@ public:
         4000.0f, 0.5f, 320000.0f, 2200000.0f,
         0.0012f, 0.00021f, 1.0f, -2.0f, 101.0f
     ) {}
+    
+    ElementType getPhaseAtTemperature(float temp) const override {
+        if (temp <= freezingPoint) return ElementType::Solid_ContaminatedWater;
+        if (temp >= boilingPoint) return ElementType::Gas_O2;  // Purification
+        return ElementType::Empty;
+    }
 };

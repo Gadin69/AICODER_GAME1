@@ -12,6 +12,11 @@ public:
         400000.0f, 6000000.0f,
         0.0f, 0.00001f, 1.5f, 1200.0f, 3000.0f
     ) {}
+    
+    ElementType getPhaseAtTemperature(float temp) const override {
+        if (temp > meltingPoint) return ElementType::Liquid_Lava;
+        return ElementType::Empty;
+    }
 };
 
 // ============================================================================
@@ -24,6 +29,12 @@ public:
         334000.0f, 2260000.0f,
         0.0f, 0.00005f, 1.2f, 0.0f, 100.0f
     ) {}
+    
+    ElementType getPhaseAtTemperature(float temp) const override {
+        if (temp > meltingPoint) return ElementType::Liquid_Water;
+        if (temp >= 100.0f) return ElementType::Gas_O2;  // Sublimation
+        return ElementType::Empty;
+    }
 };
 
 // ============================================================================
@@ -36,6 +47,11 @@ public:
         840.0f, 0.016f, 0.0f, 574000.0f,
         0.0f, 0.0f, 0.5f, -78.5f, -56.6f
     ) {}
+    
+    ElementType getPhaseAtTemperature(float temp) const override {
+        if (temp > sublimationPoint) return ElementType::Gas_CO2;
+        return ElementType::Empty;
+    }
 };
 
 // ============================================================================
@@ -49,6 +65,11 @@ public:
         320000.0f, 2200000.0f,
         0.0f, 0.00005f, 1.1f, -2.0f, 101.0f
     ) {}
+    
+    ElementType getPhaseAtTemperature(float temp) const override {
+        if (temp > meltingPoint) return ElementType::ContaminatedWater;
+        return ElementType::Empty;
+    }
 };
 
 // ============================================================================
@@ -70,4 +91,5 @@ public:
     // Override virtual methods for custom behavior
     bool canTransferHeat() const override { return false; }  // No heat transfer like vacuum
     bool isDestructible() const override { return false; }   // Cannot be destroyed
+    ElementType getPhaseAtTemperature(float temp) const override { return ElementType::Empty; }  // Never changes phase
 };

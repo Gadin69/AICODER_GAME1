@@ -75,6 +75,13 @@ public:
     // Virtual methods for polymorphic behavior (can be overridden by derived classes)
     virtual bool canTransferHeat() const { return true; }
     virtual bool isDestructible() const { return true; }
+    
+    // Phase change system - each element defines its own phase transitions
+    virtual ElementType getPhaseAtTemperature(float temp) const {
+        return ElementType::Empty;  // Default: no phase change
+    }
+    
+    virtual void applyPhaseChange(Cell& cell, ElementType newType, float oldMass) const;
 };
 
 // Type alias for backward compatibility

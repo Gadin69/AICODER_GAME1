@@ -194,121 +194,15 @@ void HeatSim::checkPhaseChangeTriggers(int x, int y, float /*deltaTime*/) {
         return;
     }
     
-    // Check if temperature triggers a phase change (instant, no gradual transition)
-    ElementType targetType = ElementType::Empty;
+    // Query element for phase change based on temperature
+    ElementType newType = props.getPhaseAtTemperature(cell.temperature);
     
-    // ==========================================
-    // WATER SYSTEM (5 transitions)
-    // ==========================================
-    
-    // WATER FREEZING -> ICE
-    if (cell.elementType == ElementType::Liquid_Water && 
-        cell.temperature <= props.freezingPoint) {
-        targetType = ElementType::Solid_Ice;
-    }
-    // ICE MELTING -> WATER
-    else if (cell.elementType == ElementType::Solid_Ice && 
-        cell.temperature > props.meltingPoint) {
-        targetType = ElementType::Liquid_Water;
-    }
-    // WATER BOILING -> STEAM
-    else if (cell.elementType == ElementType::Liquid_Water && 
-        cell.temperature >= props.boilingPoint) {
-        // DEBUG: Track why water might not boil
-        static int boilDebugCount = 0;
-        if (boilDebugCount++ % 200 == 0) {
-            std::cout << "[BOIL DEBUG] Water at " << cell.temperature 
-                      << "°C, boilingPoint=" << props.boilingPoint
-                      << ", mass=" << cell.mass
-                      << ", isLiquid=" << props.isLiquid << std::endl;
-        }
-        targetType = ElementType::Gas_O2;
-    }
-    // STEAM PHASE CHANGE - Choose correct phase based on temperature!
-    else if (cell.elementType == ElementType::Gas_O2) {
-        if (cell.temperature <= props.freezingPoint) {
-            // Below 0°C: Steam becomes ICE (deposition)
-            targetType = ElementType::Solid_Ice;
-        } else if (cell.temperature < props.condensationPoint - 5.0f) {
-            // 0°C to 95°C: Steam condenses to WATER
-            targetType = ElementType::Liquid_Water;
-        }
-        // Above 95°C: Stay as steam (no phase change)
-    }
-    // ICE SUBLIMATING -> STEAM (skip liquid phase at high temps)
-    else if (cell.elementType == ElementType::Solid_Ice && 
-        cell.temperature >= 100.0f) {
-        targetType = ElementType::Gas_O2;
-    }
-    
-    // ==========================================
-    // LAVA SYSTEM (4 transitions)
-    // ==========================================
-    
-    // LAVA FREEZING -> ROCK
-    else if (cell.elementType == ElementType::Liquid_Lava && 
-        cell.temperature <= props.freezingPoint) {
-        targetType = ElementType::Solid;
-    }
-    // ROCK MELTING -> LAVA
-    else if (cell.elementType == ElementType::Solid && 
-        cell.temperature > props.meltingPoint) {
-        targetType = ElementType::Liquid_Lava;
-    }
-    // LAVA VAPORIZING -> GAS LAVA
-    else if (cell.elementType == ElementType::Liquid_Lava && 
-        cell.temperature >= props.boilingPoint) {
-        targetType = ElementType::Gas_Lava;
-    }
-    // GAS LAVA CONDENSING -> LAVA (with hysteresis)
-    else if (cell.elementType == ElementType::Gas_Lava && 
-        cell.temperature < props.condensationPoint - 1.0f) {
-        targetType = ElementType::Liquid_Lava;
-    }
-    
-    // ==========================================
-    // CONTAMINATED WATER SYSTEM (4 transitions)
-    // ==========================================
-    
-    // CONTAMINATED WATER FREEZING -> SOLID
-    else if (cell.elementType == ElementType::ContaminatedWater && 
-        cell.temperature <= props.freezingPoint) {
-        targetType = ElementType::Solid_ContaminatedWater;
-    }
-    // FROZEN CONTAMINATED WATER MELTING -> LIQUID
-    else if (cell.elementType == ElementType::Solid_ContaminatedWater && 
-        cell.temperature > props.meltingPoint) {
-        targetType = ElementType::ContaminatedWater;
-    }
-    // CONTAMINATED WATER BOILING -> STEAM (purification)
-    else if (cell.elementType == ElementType::ContaminatedWater && 
-        cell.temperature >= props.boilingPoint) {
-        targetType = ElementType::Gas_O2;
-    }
-    // STEAM CONDENSING -> WATER (handled by element's condensationPoint property)
-    // Removed hardcoded check - was creating water mid-air when steam cooled below 100°C
-    
-    // ==========================================
-    // CO2 SYSTEM (2 transitions - deposition/sublimation)
-    // ==========================================
-    
-    // CO2 DEPOSITION -> DRY ICE (gas directly to solid)
-    else if (cell.elementType == ElementType::Gas_CO2 && 
-        cell.temperature <= props.sublimationPoint) {
-        targetType = ElementType::Solid_DryIce;
-    }
-    // DRY ICE SUBLIMATION -> CO2 GAS (solid directly to gas)
-    else if (cell.elementType == ElementType::Solid_DryIce && 
-        cell.temperature > props.sublimationPoint) {
-        targetType = ElementType::Gas_CO2;
-    }
-    
-    // If no phase change triggered, return
-    if (targetType == ElementType::Empty) {
+    // No phase change needed
+    if (newType == ElementType::Empty) {
         return;
     }
     
-    // DEBUG: Log when phase change executes with timestamp
+    // Debug logging
     static int phaseExecCount = 0;
     static auto phaseStartTime = std::chrono::steady_clock::now();
     if (phaseExecCount++ % 50 == 0) {
@@ -316,113 +210,62 @@ void HeatSim::checkPhaseChangeTriggers(int x, int y, float /*deltaTime*/) {
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - phaseStartTime).count();
         std::cout << "[" << elapsed << "ms] [PHASE] "
                   << ElementTypes::getTypeName(cell.elementType)
-                  << " -> " << ElementTypes::getTypeName(targetType)
+                  << " -> " << ElementTypes::getTypeName(newType)
                   << " at " << cell.temperature << "°C" << std::endl;
     }
     
-    // ==========================================
-    // EXECUTE PHASE CHANGE (like cell placement)
-    // ==========================================
+    float oldMass = cell.mass;
     
-    const Element& newProps = ElementTypes::getElement(targetType);
+    // Apply phase change using element's polymorphic method
+    props.applyPhaseChange(cell, newType, oldMass);
     
-    // Preserve temperature (phase change happens at current temp)
-    float preservedTemp = cell.temperature;
-    
-    // Convert mass based on phase change type
-    float newMass = cell.mass;
-    
-    // Liquid -> Gas: Convert ALL liquid mass to gas mass
-    // Gas has lower density, so all the mass converts
-    if (props.isLiquid && newProps.isGas) {
-        newMass = cell.mass;  // All mass converts to gas
+    // SPECIAL CASE: Steam condensation collection
+    // (This stays here because it involves neighbor interactions)
+    if (props.isGas && newType == ElementType::Liquid_Water) {
+        collectCondensedWater(cell, x, y, oldMass);
     }
-    // Gas -> Liquid: Gas mass becomes liquid mass (PRESERVE MASS!)
-    else if (props.isGas && newProps.isLiquid) {
-        newMass = cell.mass;  // Preserve exact mass - NO MAGIC MASS!
-    }
-    // Solid <-> Liquid: Keep mass as-is
-    // Solid <-> Gas: Keep mass as-is
+}
+
+void HeatSim::collectCondensedWater(Cell& cell, int x, int y, float originalMass) {
+    int neighbors[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+    float remainingMass = cell.mass;
     
-    // DIRECTLY replace the cell (like placement does)
-    cell.elementType = targetType;
-    cell.mass = newMass;
-    cell.temperature = preservedTemp;
-    
-    // Update pressure for gases
-    if (newProps.isGas) {
-        cell.pressure = (newMass * 8.314f * (cell.temperature + 273.15f)) / 0.001f;  // Ideal gas law
-    } else {
-        cell.pressure = 0.0f;
-    }
-    
-    // Reset velocity (but give liquids gravity to fall immediately)
-    cell.velocityX = 0.0f;
-    if (newProps.isLiquid) {
-        cell.velocityY = 2.0f;  // Give downward velocity so it falls immediately
-    } else {
-        cell.velocityY = 0.0f;
-    }
-    
-    // Update color to new element
-    cell.updateColor();
-    
-    // Mark cell as updated so it gets simulated next frame
-    cell.updated = true;
-    
-    // Prevent below absolute zero
-    if (cell.temperature < -273.15f) {
-        cell.temperature = -273.15f;
-    }
-    
-    // STEAM COLLECTION: If steam condensed to water, check if it should merge with adjacent water
-    if (props.isGas && newProps.isLiquid && newProps.name == "Water") {
-        // Check all 4 neighbors for water cells to merge into
-        int neighbors[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+    for (auto& dir : neighbors) {
+        int nx = x + dir[0];
+        int ny = y + dir[1];
         
-        for (auto& dir : neighbors) {
-            int nx = x + dir[0];
-            int ny = y + dir[1];
+        if (!grid->isValidPosition(nx, ny)) continue;
+        
+        Cell& neighbor = grid->getCell(nx, ny);
+        
+        // If neighbor is water and has space (< 1.0 kg), merge into it
+        if (neighbor.elementType == ElementType::Liquid_Water && neighbor.mass < 1.0f) {
+            float spaceAvailable = 1.0f - neighbor.mass;
+            float mergeAmount = std::min(remainingMass, spaceAvailable);
             
-            if (!grid->isValidPosition(nx, ny)) continue;
+            neighbor.mass += mergeAmount;
+            neighbor.updated = true;  // Mark neighbor as updated so it flows next tick
+            neighbor.updateColor();  // Update color for new mass
+            remainingMass -= mergeAmount;
             
-            Cell& neighbor = grid->getCell(nx, ny);
-            
-            // If neighbor is water and has space (< 1.0 kg), merge into it
-            if (neighbor.elementType == ElementType::Liquid_Water && neighbor.mass < 1.0f) {
-                float spaceAvailable = 1.0f - neighbor.mass;
-                float mergeAmount = std::min(newMass, spaceAvailable);
-                
-                neighbor.mass += mergeAmount;
-                neighbor.updated = true;  // Mark neighbor as updated so it flows next tick
-                neighbor.updateColor();  // Update color for new mass
-                newMass -= mergeAmount;
-                
-                // If remaining mass is too small, cap it at 0.001kg to prevent micro-cells
-                if (newMass < 0.001f && newMass > 0.0f) {
-                    newMass = 0.001f;  // Cap at minimum, don't convert to vacuum
-                }
-                
-                // If all mass merged (zero remaining), this cell becomes vacuum
-                if (newMass < 0.0001f) {
-                    cell.elementType = ElementType::Vacuum;
-                    cell.mass = 0.0f;
-                    cell.pressure = 0.0f;
-                    cell.temperature = -273.15f;
-                    cell.velocityX = 0.0f;
-                    cell.velocityY = 0.0f;
-                    cell.updated = false;
-                    cell.targetElementType = ElementType::Empty;
-                    cell.phaseTransitionProgress = 0.0f;
-                    cell.phaseTransitionSpeed = 0.0f;
-                    cell.microMassDecayTime = 0.0f;
-                    cell.updateColor();  // Use proper vacuum color
-                    break;
-                }
-            }
+            if (remainingMass < 0.001f) break;
         }
-        
-        // Update remaining mass
-        cell.mass = newMass;
+    }
+    
+    // Update this cell with remaining mass
+    cell.mass = remainingMass;
+    if (remainingMass < 0.0001f) {
+        cell.elementType = ElementType::Vacuum;
+        cell.mass = 0.0f;
+        cell.pressure = 0.0f;
+        cell.temperature = -273.15f;
+        cell.velocityX = 0.0f;
+        cell.velocityY = 0.0f;
+        cell.updated = false;
+        cell.targetElementType = ElementType::Empty;
+        cell.phaseTransitionProgress = 0.0f;
+        cell.phaseTransitionSpeed = 0.0f;
+        cell.microMassDecayTime = 0.0f;
+        cell.updateColor();  // Use proper vacuum color
     }
 }

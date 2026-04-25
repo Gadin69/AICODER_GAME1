@@ -22,5 +22,6 @@ private:
     
     // Internal heat transfer functions
     void checkPhaseChangeTriggers(int x, int y, float deltaTime);
+    void collectCondensedWater(Cell& cell, int x, int y, float originalMass);
     void startPhaseTransition(Cell& cell, ElementType targetType, float transitionSpeed);
 };

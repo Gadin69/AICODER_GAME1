@@ -52,3 +52,48 @@ const Element& ElementTypes::getElement(ElementType type) {
 std::string ElementTypes::getTypeName(ElementType type) {
     return getElement(type).name;
 }
+
+// Base implementation of applyPhaseChange - handles common phase change logic
+void Element::applyPhaseChange(Cell& cell, ElementType newType, float oldMass) const {
+    const Element& newProps = ElementTypes::getElement(newType);
+    
+    // Preserve temperature
+    float preservedTemp = cell.temperature;
+    float newMass = oldMass;
+    
+    // Mass conversion rules
+    if (isLiquid && newProps.isGas) {
+        newMass = oldMass;  // All mass converts
+    } else if (isGas && newProps.isLiquid) {
+        newMass = oldMass;  // Preserve mass
+    }
+    // Solid <-> Liquid: Keep mass as-is
+    // Solid <-> Gas: Keep mass as-is
+    
+    // Apply changes
+    cell.elementType = newType;
+    cell.mass = newMass;
+    cell.temperature = preservedTemp;
+    
+    // Pressure for gases
+    if (newProps.isGas) {
+        cell.pressure = (newMass * 8.314f * (cell.temperature + 273.15f)) / 0.001f;  // Ideal gas law
+    } else {
+        cell.pressure = 0.0f;
+    }
+    
+    // Reset velocity (but give liquids gravity to fall immediately)
+    cell.velocityX = 0.0f;
+    cell.velocityY = newProps.isLiquid ? 2.0f : 0.0f;
+    
+    // Update color to new element
+    cell.updateColor();
+    
+    // Mark cell as updated so it gets simulated next frame
+    cell.updated = true;
+    
+    // Prevent below absolute zero
+    if (cell.temperature < -273.15f) {
+        cell.temperature = -273.15f;
+    }
+}
