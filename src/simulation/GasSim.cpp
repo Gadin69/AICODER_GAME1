@@ -65,32 +65,6 @@ bool GasSim::update(float deltaTime) {
     int width = grid->getWidth();
     int height = grid->getHeight();
     
-    // DEBUG: Count ALL element types in grid
-    static int elementTypeCounts[20] = {0};
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            if (!grid->isValidPosition(x, y)) continue;
-            Cell& cell = grid->getCell(x, y);
-            int typeIdx = static_cast<int>(cell.elementType);
-            if (typeIdx >= 0 && typeIdx < 20) {
-                elementTypeCounts[typeIdx]++;
-            }
-        }
-    }
-    
-    // Print element type distribution every 60 ticks
-    static int typePrintCounter = 0;
-    typePrintCounter++;
-    if (typePrintCounter % 60 == 0) {
-        std::cerr << "[ELEMENT TYPES] ";
-        for (int i = 0; i < 20; i++) {
-            if (elementTypeCounts[i] > 0) {
-                std::cerr << "Type" << i << "=" << elementTypeCounts[i] << " ";
-            }
-        }
-        std::cerr << std::endl;
-    }
-    
     // DOUBLE-BUFFERED GAS SIMULATION (same as HeatSim pattern):
     // Step 1: Snapshot all gas cell data
     // Step 2: Calculate gas movements in separate buffers
@@ -106,6 +80,9 @@ bool GasSim::update(float deltaTime) {
     
     std::vector<std::vector<GasCellData>> gasSnapshot(height, std::vector<GasCellData>(width));
     int gasCellsFound = 0;
+    int gasCellsWithMass = 0;
+    int gasCellsWithoutMass = 0;
+    
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             if (!grid->isValidPosition(x, y)) continue;
@@ -116,28 +93,23 @@ bool GasSim::update(float deltaTime) {
                 gasSnapshot[y][x].pressure = cell.pressure;
                 gasSnapshot[y][x].temperature = cell.temperature;
                 gasCellsFound++;
+                
+                if (cell.mass > 0.0f) {
+                    gasCellsWithMass++;
+                } else {
+                    gasCellsWithoutMass++;
+                }
             }
         }
     }
     
-    std::cerr << "[SNAPSHOT DEBUG] Captured " << gasCellsFound << " gas cells in snapshot" << std::endl;
-    
-    // Debug: Show details of first 5 Type5 cells found in grid
-    static int debugTick = 0;
-    debugTick++;
-    if (debugTick <= 3) {
-        int type5Count = 0;
-        for (int y = 0; y < height && type5Count < 5; ++y) {
-            for (int x = 0; x < width && type5Count < 5; ++x) {
-                if (!grid->isValidPosition(x, y)) continue;
-                Cell& cell = grid->getCell(x, y);
-                if (cell.elementType == ElementType::Gas_O2) {
-                    std::cerr << "[TYPE5 CELL] (" << x << "," << y << ") mass=" << cell.mass 
-                              << " pressure=" << cell.pressure << " temp=" << cell.temperature << std::endl;
-                    type5Count++;
-                }
-            }
-        }
+    // Print gas summary every 30 ticks
+    static int summaryTick = 0;
+    summaryTick++;
+    if (summaryTick % 30 == 0) {
+        std::cerr << "[GAS SUMMARY] Total=" << gasCellsFound 
+                  << " WithMass=" << gasCellsWithMass
+                  << " NoMass=" << gasCellsWithoutMass << std::endl;
     }
     
     // ========== OLD EXPANSION SYSTEM - DISABLED (replaced by new STEP 4 flow algorithm below) ==========

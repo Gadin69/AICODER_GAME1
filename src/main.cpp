@@ -149,6 +149,14 @@ void initializeDemo() {
     int gasEndX = settings.gridWidth * 7 / 8;
     for (int x = gasStartX; x < gasEndX; ++x) {
         simGrid.setCellType(x, 5, ElementType::Gas_O2);
+        
+        // Set gas cell properties (mass, temperature, pressure)
+        Cell& gasCell = simGrid.getCell(x, 5);
+        ElementProperties gasProps = ElementTypes::getElement(ElementType::Gas_O2);
+        gasCell.temperature = gasProps.defaultTemperature;
+        gasCell.mass = 10.0f;  // Full gas cell
+        gasCell.pressure = (gasCell.mass * 8.314f * (gasCell.temperature + 273.15f)) / 0.001f;
+        gasCell.updated = true;
     }
     
     // Update all cell colors
