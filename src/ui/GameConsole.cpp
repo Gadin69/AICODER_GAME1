@@ -54,8 +54,22 @@ void GameConsole::initialize(float x, float y, float width, float height, const 
     }, "Toggle admin/developer mode (implementation pending)");
     
     registerCommand("devmode", [this](const std::vector<std::string>& args) {
-        addOutput("Developer mode command - implementation pending", sf::Color(200, 200, 100));
-    }, "Toggle developer mode tools and features (implementation pending)");
+        extern bool g_devmodeEnabled;
+        if (args.empty()) {
+            // Toggle
+            g_devmodeEnabled = !g_devmodeEnabled;
+            addOutput("Developer mode " + std::string(g_devmodeEnabled ? "ENABLED" : "DISABLED"), 
+                     g_devmodeEnabled ? sf::Color(100, 255, 100) : sf::Color(255, 100, 100));
+        } else if (args[0] == "on" || args[0] == "true") {
+            g_devmodeEnabled = true;
+            addOutput("Developer mode ENABLED", sf::Color(100, 255, 100));
+        } else if (args[0] == "off" || args[0] == "false") {
+            g_devmodeEnabled = false;
+            addOutput("Developer mode DISABLED", sf::Color(255, 100, 100));
+        } else {
+            addOutput("Usage: devmode [on|off]", sf::Color(255, 200, 100));
+        }
+    }, "Toggle developer mode (shows updating status in info widget)");
     
     initialized = true;
 }

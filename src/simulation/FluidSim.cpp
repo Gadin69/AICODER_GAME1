@@ -490,10 +490,6 @@ bool FluidSim::update(float deltaTime) {
             
             // Same gas type - force merge (can exceed max)
             if (neighbor.elementType == displaced.type) {
-                std::cout << "[DEBUG] Merging gas at (" << displaced.x << "," << displaced.y 
-                          << ") into neighbor at (" << nx << "," << ny 
-                          << ") neighbor mass before=" << neighbor.mass << std::endl;
-                
                 // Mass-weighted temperature average
                 float totalMass = neighbor.mass + displaced.mass;
                 float newTemp = (neighbor.mass * neighbor.temperature + displaced.mass * displaced.temperature) / totalMass;

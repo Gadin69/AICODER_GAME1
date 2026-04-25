@@ -20,7 +20,25 @@ GasSim::GasSim()
 }
 
 bool GasSim::update(float deltaTime) {
-    if (!enabled || !grid) return false;
+    if (!enabled || !grid) {
+        static bool warned = false;
+        if (!warned) {
+            std::cerr << "[GAS] WARNING: GasSim DISABLED or no grid! enabled=" << enabled << " grid=" << (grid != nullptr) << std::endl;
+            warned = true;
+        }
+        return false;
+    }
+    
+    // ALWAYS print first tick to confirm GasSim is running
+    static bool firstTick = true;
+    if (firstTick) {
+        std::cerr << "[GAS] GasSim::update() CALLED! enabled=" << enabled << " grid=" << (grid != nullptr) << std::endl;
+        firstTick = false;
+    }
+    
+    // Track gas cells found
+    static int totalGasCellsFound = 0;
+    static int totalOvermassCellsFound = 0;
     
     // DEBUG: Log delta timing (COMMENTED OUT - too spammy)
     /*
@@ -47,14 +65,38 @@ bool GasSim::update(float deltaTime) {
     int width = grid->getWidth();
     int height = grid->getHeight();
     
+    // DEBUG: Count ALL element types in grid
+    static int elementTypeCounts[20] = {0};
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            if (!grid->isValidPosition(x, y)) continue;
+            Cell& cell = grid->getCell(x, y);
+            int typeIdx = static_cast<int>(cell.elementType);
+            if (typeIdx >= 0 && typeIdx < 20) {
+                elementTypeCounts[typeIdx]++;
+            }
+        }
+    }
+    
+    // Print element type distribution every 60 ticks
+    static int typePrintCounter = 0;
+    typePrintCounter++;
+    if (typePrintCounter % 60 == 0) {
+        std::cerr << "[ELEMENT TYPES] ";
+        for (int i = 0; i < 20; i++) {
+            if (elementTypeCounts[i] > 0) {
+                std::cerr << "Type" << i << "=" << elementTypeCounts[i] << " ";
+            }
+        }
+        std::cerr << std::endl;
+    }
+    
     // DOUBLE-BUFFERED GAS SIMULATION (same as HeatSim pattern):
     // Step 1: Snapshot all gas cell data
     // Step 2: Calculate gas movements in separate buffers
     // Step 3: Apply all changes simultaneously
     
-    // ========== OLD EXPANSION SYSTEM - DISABLED (replaced by new STEP 4 flow algorithm below) ==========
-    #if 0
-    // STEP 1: Snapshot current gas state
+    // STEP 1: Snapshot current gas state (REQUIRED for STEP 4 flow)
     struct GasCellData {
         ElementType type = ElementType::Vacuum;
         float mass = 0.0f;
@@ -63,19 +105,44 @@ bool GasSim::update(float deltaTime) {
     };
     
     std::vector<std::vector<GasCellData>> gasSnapshot(height, std::vector<GasCellData>(width));
+    int gasCellsFound = 0;
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
-            if (grid->isValidPosition(x, y)) {
+            if (!grid->isValidPosition(x, y)) continue;
+            Cell& cell = grid->getCell(x, y);
+            if (isGasType(cell.elementType)) {
+                gasSnapshot[y][x].type = cell.elementType;
+                gasSnapshot[y][x].mass = cell.mass;
+                gasSnapshot[y][x].pressure = cell.pressure;
+                gasSnapshot[y][x].temperature = cell.temperature;
+                gasCellsFound++;
+            }
+        }
+    }
+    
+    std::cerr << "[SNAPSHOT DEBUG] Captured " << gasCellsFound << " gas cells in snapshot" << std::endl;
+    
+    // Debug: Show details of first 5 Type5 cells found in grid
+    static int debugTick = 0;
+    debugTick++;
+    if (debugTick <= 3) {
+        int type5Count = 0;
+        for (int y = 0; y < height && type5Count < 5; ++y) {
+            for (int x = 0; x < width && type5Count < 5; ++x) {
+                if (!grid->isValidPosition(x, y)) continue;
                 Cell& cell = grid->getCell(x, y);
-                if (isGasType(cell.elementType)) {
-                    gasSnapshot[y][x].type = cell.elementType;
-                    gasSnapshot[y][x].mass = cell.mass;
-                    gasSnapshot[y][x].pressure = cell.pressure;
-                    gasSnapshot[y][x].temperature = cell.temperature;
+                if (cell.elementType == ElementType::Gas_O2) {
+                    std::cerr << "[TYPE5 CELL] (" << x << "," << y << ") mass=" << cell.mass 
+                              << " pressure=" << cell.pressure << " temp=" << cell.temperature << std::endl;
+                    type5Count++;
                 }
             }
         }
     }
+    
+    // ========== OLD EXPANSION SYSTEM - DISABLED (replaced by new STEP 4 flow algorithm below) ==========
+    #if 0
+    // NOTE: gasSnapshot already declared above, reusing it here
     
     // STEP 2: Calculate gas transfers (HEAT-LIKE DIFFUSION)
     // Gases spread to ALL adjacent cells (vacuum, gas, even liquids via buoyancy)
@@ -91,8 +158,19 @@ bool GasSim::update(float deltaTime) {
     };
     std::vector<std::vector<MassIn>> massIn(height, std::vector<MassIn>(width));
     
-    for (int y = 1; y < height - 1; ++y) {
-        for (int x = 1; x < width - 1; ++x) {
+    // DEBUG: Track loop execution
+    static int loopDebugTick = 0;
+    extern bool g_debugPrintsEnabled;
+    
+    if (g_debugPrintsEnabled && loopDebugTick < 5) {
+        std::cout << "[GAS] ===== GasSim update tick " << loopDebugTick << " =====" << std::endl;
+        loopDebugTick++;
+    } else if (!g_debugPrintsEnabled) {
+        loopDebugTick = 0;  // Reset when debug is off
+    }
+    
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
             if (!grid->isValidPosition(x, y)) continue;
             
             // GAS CELLS: ALWAYS spread to conserve mass (no LOD skipping!)
@@ -102,26 +180,72 @@ bool GasSim::update(float deltaTime) {
             // Only process gas cells from snapshot
             if (!isGasType(gasSnapshot[y][x].type)) continue;
             
-            // DEBUG: Track spawned gas cells
-            static int spawnDebugCount = 0;
-            bool isSpawnedDebug = (gasSnapshot[y][x].mass >= 0.19f && gasSnapshot[y][x].mass <= 0.21f);
-            if (isSpawnedDebug) {
-                spawnDebugCount++;
-                if (spawnDebugCount <= 10) {  // First 10 ticks only
-                    std::cout << "[GAS DEBUG] SPAWNED gas at (" << x << "," << y 
-                              << ") mass=" << gasSnapshot[y][x].mass 
-                              << " pressure=" << gasSnapshot[y][x].pressure
-                              << " temp=" << gasSnapshot[y][x].temperature << std::endl;
-                }
-            }
+            totalGasCellsFound++;
             
             float currentMass = gasSnapshot[y][x].mass;
             float currentPressure = gasSnapshot[y][x].pressure;
+            
+            if (currentMass > MAX_GAS_MASS) {
+                totalOvermassCellsFound++;
+            }
+            
+            // DEBUG: Print gas cells when debug is enabled
+            extern bool g_debugPrintsEnabled;
+            if (g_debugPrintsEnabled) {
+                static int printCount = 0;
+                if (printCount < 50) {
+                    printCount++;
+                    Cell& liveCell = grid->getCell(x, y);
+                    std::cout << "[GAS] Processing (" << x << "," << y << ") snap=" << currentMass 
+                              << " live=" << liveCell.mass << " type=" << static_cast<int>(gasSnapshot[y][x].type) << std::endl;
+                }
+            }
+            
+            // CRITICAL FIX: Check LIVE grid for over-mass gas (may have been merged by FluidSim)
+            Cell& liveCell = grid->getCell(x, y);
+            bool hasLiveOvermass = isGasType(liveCell.elementType) && liveCell.mass > MAX_GAS_MASS;
+            bool hasSnapshotOvermass = currentMass > MAX_GAS_MASS;
+            
+            if (isGasType(liveCell.elementType) && liveCell.mass > currentMass) {
+                // FluidSim merged gas into this cell - use live mass instead
+                currentMass = liveCell.mass;
+            }
+            
+            // DEBUG: Show gas cells that are over-mass in EITHER snapshot or live
+            extern bool g_debugPrintsEnabled;
+            if (g_debugPrintsEnabled && (hasSnapshotOvermass || hasLiveOvermass)) {
+                std::cout << "[GAS] Cell (" << x << "," << y << ") snap=" << gasSnapshot[y][x].mass 
+                          << " live=" << liveCell.mass << " using=" << currentMass 
+                          << " snap_over=" << (hasSnapshotOvermass ? "Y" : "N")
+                          << " live_over=" << (hasLiveOvermass ? "Y" : "N") << std::endl;
+            }
+            
+            // DEBUG: Track spawned gas cells
+            if (g_debugPrintsEnabled) {
+                static int spawnDebugCount = 0;
+                bool isSpawnedDebug = (gasSnapshot[y][x].mass >= 0.19f && gasSnapshot[y][x].mass <= 0.21f);
+                if (isSpawnedDebug) {
+                    spawnDebugCount++;
+                    if (spawnDebugCount <= 10) {  // First 10 only
+                        std::cout << "[GAS DEBUG] SPAWNED gas at (" << x << "," << y 
+                                  << ") mass=" << gasSnapshot[y][x].mass 
+                                  << " pressure=" << gasSnapshot[y][x].pressure
+                                  << " temp=" << gasSnapshot[y][x].temperature << std::endl;
+                    }
+                }
+            }
             
             // PERFORMANCE OPTIMIZATION: Only expand (spread mass) if over max capacity
             // Gas cells at or below max mass skip expensive spreading calculation
             // They will still float and merge in STEP 4
             if (currentMass > MAX_GAS_MASS) {
+                // DEBUG: Track over-compressed gas
+                static int overmassDebugCount = 0;
+                overmassDebugCount++;
+                if (overmassDebugCount <= 20) {
+                    std::cout << "[GAS DEBUG] Overmass gas at (" << x << "," << y 
+                              << ") mass=" << currentMass << std::endl;
+                }
                 // OVER CAPACITY: Perform expansion/spreading to reduce mass
                 // Continue to STEP 2 spreading logic below
             } else {
@@ -896,6 +1020,14 @@ bool GasSim::update(float deltaTime) {
         }
         
         lastTotalMass = totalMass;
+    }
+    
+    // Print gas cell summary
+    static int summaryCounter = 0;
+    summaryCounter++;
+    if (summaryCounter % 60 == 0) {  // Every 60 ticks (~1 second)
+        std::cerr << "[GAS SUMMARY] Tick " << summaryCounter << ": Found " << totalGasCellsFound 
+                  << " gas cells, " << totalOvermassCellsFound << " over-mass" << std::endl;
     }
     
     return true;

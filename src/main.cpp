@@ -21,6 +21,9 @@
 // Global debug print toggle (can be controlled via console)
 bool g_debugPrintsEnabled = false;
 
+// Global developer mode toggle
+bool g_devmodeEnabled = false;
+
 // Global variables for demo
 Renderer renderer;
 TileMap tileMap;
@@ -566,6 +569,14 @@ void updateElementInspector() {
             char massBuf[100];
             snprintf(massBuf, sizeof(massBuf), "Mass: %.4f kg\n", cell.mass);
             info += massBuf;
+            
+            // Dev mode: Show updating status
+            extern bool g_devmodeEnabled;
+            if (g_devmodeEnabled) {
+                info += "Updating: ";
+                info += cell.updated ? "true" : "false";
+                info += "\n";
+            }
             
             if (props.isLiquid || props.isSolid) {
                 float meltF = (props.meltingPoint * 9.0f / 5.0f) + 32.0f;
