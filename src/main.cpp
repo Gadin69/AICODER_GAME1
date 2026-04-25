@@ -322,6 +322,12 @@ void placeCellAtMouse(sf::Mouse::Button button) {
             return;  // Already has this element, don't overwrite
         }
         
+        // Check if existing cell is destructible (skip indestructible elements)
+        const Element& existingProps = ElementTypes::getElement(existingCell.elementType);
+        if (!existingProps.isDestructible()) {
+            return;  // Cannot overwrite indestructible element
+        }
+        
         // THREAD-SAFE: Lock grid before modifying cells
         simGrid.lock();
         

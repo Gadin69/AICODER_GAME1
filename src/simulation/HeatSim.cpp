@@ -57,15 +57,14 @@ bool HeatSim::update(float deltaTime) {
             const Cell& cell = grid->getCell(x, y);
             if (cell.elementType == ElementType::Empty) continue;
             
-            // Skip vacuum - no heat transfer
-            if (cell.elementType == ElementType::Vacuum) {
+            // Use polymorphic check for heat transfer capability
+            const Element& cellProps = ElementTypes::getElement(cell.elementType);
+            if (!cellProps.canTransferHeat()) {
                 newTemps[y][x] = tempSnapshot[y][x];  // Keep current temp
                 continue;
             }
             
             // Calculate stable heat transfer using weighted averaging
-            const Element& cellProps = ElementTypes::getElement(cell.elementType);
-            
             // Use mass for all element types (gases and liquids both have mass)
             float cellThermalMass = std::max(cell.mass * cellProps.specificHeatCapacity, 0.001f);
             
@@ -87,10 +86,10 @@ bool HeatSim::update(float deltaTime) {
                 if (!grid->isValidPosition(nx, ny)) continue;
                 
                 const Cell& neighborCell = grid->getCell(nx, ny);
-                if (neighborCell.elementType == ElementType::Vacuum) continue;
                 if (neighborCell.elementType == ElementType::Empty) continue;
                 
                 const Element& neighborProps = ElementTypes::getElement(neighborCell.elementType);
+                if (!neighborProps.canTransferHeat()) continue;
                 // Use mass for all element types
                 float neighborThermalMass = std::max(neighborCell.mass * neighborProps.specificHeatCapacity, 0.001f);
                 
@@ -145,7 +144,10 @@ bool HeatSim::update(float deltaTime) {
             
             Cell& cell = grid->getCell(x, y);
             if (cell.elementType == ElementType::Empty) continue;
-            if (cell.elementType == ElementType::Vacuum) continue;
+            
+            // Use polymorphic check for heat transfer capability
+            const Element& cellPropsCheck = ElementTypes::getElement(cell.elementType);
+            if (!cellPropsCheck.canTransferHeat()) continue;
             
             // LOD CHECK: Only update cells that were processed in STEP 2
             if (!shouldUpdateCell(x, y, deltaTime)) {
@@ -156,7 +158,6 @@ bool HeatSim::update(float deltaTime) {
             // Apply calculated temperature
             // GASES: Skip temperature updates - gas temperature is handled by GasSim only
             // But still allow phase changes (handled later in this function)
-            const Element& cellPropsCheck = ElementTypes::getElement(cell.elementType);
             if (!cellPropsCheck.isGas) {
                 cell.temperature = newTemps[y][x];
             }
@@ -188,9 +189,8 @@ void HeatSim::checkPhaseChangeTriggers(int x, int y, float /*deltaTime*/) {
     Cell& cell = grid->getCell(x, y);
     const Element& props = ElementTypes::getElement(cell.elementType);
     
-    // Skip vacuum and empty cells
-    if (cell.elementType == ElementType::Vacuum || 
-        cell.elementType == ElementType::Empty) {
+    // Skip vacuum and empty cells (or any element that can't transfer heat)
+    if (!props.canTransferHeat() || cell.elementType == ElementType::Empty) {
         return;
     }
     

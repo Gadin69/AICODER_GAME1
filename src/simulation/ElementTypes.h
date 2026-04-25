@@ -71,6 +71,10 @@ public:
     float condensationPoint;     // °C (gas → liquid)
     float sublimationPoint;      // °C (solid → gas, if applicable)
     float vaporizationPoint;     // °C (liquid → gas, alternative to boiling)
+    
+    // Virtual methods for polymorphic behavior (can be overridden by derived classes)
+    virtual bool canTransferHeat() const { return true; }
+    virtual bool isDestructible() const { return true; }
 };
 
 // Type alias for backward compatibility
