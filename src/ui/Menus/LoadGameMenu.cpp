@@ -346,6 +346,14 @@ MenuAction LoadGameMenu::handleEvent(const sf::Event& event) {
             saveListBorder.handleMousePress(clickPos);
             
             // Check save entries (use stored absolute positions + scroll border screen position)
+            // CRITICAL: Must convert from LOCAL to SCREEN coordinates for hit detection
+            // Entry position is relative to scroll border, need to add scroll border's screen position
+            // and subtract scroll offset to get actual screen position.
+            //
+            // Common bug: Using entry.getPosition() directly gives local coords, causing
+            // mouse hit detection to be offset from visual position.
+            // Fix: screenPos = scrollBorderPos + entryLocalPos - scrollOffset
+            
             sf::Vector2f scrollBorderPos = saveListBorder.getPosition();
             float scrollOffset = saveListBorder.getScrollOffset();
             

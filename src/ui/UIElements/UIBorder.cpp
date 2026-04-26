@@ -63,6 +63,13 @@ void UIBorder::addChild(UIElement* child) {
     elemChild.relWidth = 1.0f;
     elemChild.relHeight = 1.0f;
     elemChild.useAbsolutePosition = true;
+    
+    // CRITICAL: Store current position and size BEFORE adding to vector.
+    // If we don't store these here, they'll be (0,0) because child->getPosition()
+    // might be called later when position has changed.
+    //
+    // Common bug: Children render at (0,0) because absolutePos was captured at wrong time.
+    // Fix: Capture position/size immediately in addChild(), not later.
     elemChild.absolutePos = child->getPosition();  // Store current position
     elemChild.absoluteSize = child->getSize();     // Store current size
     

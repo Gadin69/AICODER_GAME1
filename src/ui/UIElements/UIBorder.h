@@ -43,7 +43,12 @@ public:
     // Mouse through mode - if true, border doesn't block mouse events (for overlays)
     bool mouseThrough = false;
     
-    // Getters for mouse collision detection (override to use border's values)
+    // CRITICAL: These override UIElement's virtual functions to return border's position/size
+    // instead of UIElement's uninitialized position/size members.
+    //
+    // Common bug: If not virtual, calling getPosition() on UIElement* returns (0,0)
+    // because it calls UIElement::getPosition() instead of UIBorder::getPosition().
+    // Fix: Make virtual in base class, override here to return border.getPosition().
     sf::Vector2f getPosition() const override;
     sf::Vector2f getSize() const override;
     bool containsPoint(const sf::Vector2f& point) const;  // Hit testing

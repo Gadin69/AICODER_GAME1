@@ -23,6 +23,12 @@ public:
     virtual void handleTextEntered(const sf::Event::TextEntered& textEvent) {}
     
     // Position/size accessors
+    // CRITICAL: These MUST be virtual for polymorphic access to work correctly.
+    // When calling getPosition() on UIElement* pointing to UIBorder, we need
+    // it to call UIBorder::getPosition() (returns border position), not
+    // UIElement::getPosition() (returns uninitialized position member).
+    //
+    // Common bug: Non-virtual functions cause wrong coordinates when using base pointers.
     virtual sf::Vector2f getPosition() const { return position; }
     virtual sf::Vector2f getSize() const { return size; }
     virtual void setPosition(float x, float y);

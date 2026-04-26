@@ -96,6 +96,13 @@ void UISaveEntry::render(Renderer& renderer) {
     // Draw border background (already at correct screen position)
     renderer.drawRectangle(getBorder());
     
+    // IMPORTANT: Text elements use LOCAL coordinates (relative to entry's top-left)
+    // but SFML renders in SCREEN coordinates. We must offset text positions by
+    // the entry's screen position before rendering, then restore them.
+    //
+    // Common bug: Without this offset, text renders at (15, 15) from screen origin
+    // instead of (15, 15) from the entry's position.
+    
     // Temporarily offset text positions to screen coordinates
     sf::Vector2f originalNamePos = nameText->getPosition();
     sf::Vector2f originalDateTimePos = dateTimeText->getPosition();
@@ -110,7 +117,7 @@ void UISaveEntry::render(Renderer& renderer) {
     if (dateTimeText) renderer.drawText(*dateTimeText);
     if (detailsText) renderer.drawText(*detailsText);
     
-    // Restore local coordinates
+    // Restore local coordinates (so they remain relative to entry)
     nameText->setPosition(originalNamePos);
     dateTimeText->setPosition(originalDateTimePos);
     detailsText->setPosition(originalDetailsPos);

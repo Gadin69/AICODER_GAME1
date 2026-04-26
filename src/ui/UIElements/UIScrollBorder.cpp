@@ -40,7 +40,13 @@ void UIScrollBorder::render(Renderer& renderer) {
             sf::Vector2f childPos = child.useAbsolutePosition ? child.absolutePos : child.element->getPosition();
             sf::Vector2f childSize = child.useAbsolutePosition ? child.absoluteSize : child.element->getSize();
             
-            // Apply scroll offset and convert to screen coordinates
+            // CRITICAL: Convert from LOCAL coordinates to SCREEN coordinates
+            // childPos is relative to scroll border's top-left, need to add borderPos
+            // Also apply scroll offset to Y coordinate
+            //
+            // Common bug: Using childPos directly renders at wrong screen position
+            // Fix: screenX = borderPos.x + childPos.x, screenY = borderPos.y + scrolledY
+            
             float scrolledY = childPos.y - scrollOffset;
             float screenX = borderPos.x + childPos.x;
             float screenY = borderPos.y + scrolledY;
