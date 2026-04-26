@@ -44,6 +44,35 @@ void UITextInput::initialize(float x, float y, float width, float height, const 
 void UITextInput::render(Renderer& renderer) {
     if (!initialized) return;
     
+    // CRITICAL: UITextInput elements use LOCAL coordinates (relative to component's top-left)
+    // but SFML renders in SCREEN coordinates. We must offset all elements by the
+    // component's position before rendering, then restore them.
+    //
+    // Common bug: Without this offset, text input renders at wrong screen position
+    // (e.g., at initialize coordinates instead of UIBorder-calculated position).
+    
+    // Get current screen position
+    sf::Vector2f currentPos = getPosition();
+    
+    // Store original positions
+    sf::Vector2f originalBoxPos = inputBox.getPosition();
+    sf::Vector2f originalLabelPos = labelText->getPosition();
+    sf::Vector2f originalInputPos = inputText->getPosition();
+    sf::Vector2f originalCursorPos = cursor.getPosition();
+    
+    // Offset all elements to screen coordinates
+    // The elements were initialized with absolute positions, so we need to:
+    // 1. Calculate the offset from initialize position to current position
+    // 2. Apply that offset to all elements
+    float offsetX = currentPos.x - originalBoxPos.x;
+    float offsetY = currentPos.y - originalBoxPos.y;
+    
+    inputBox.setPosition(sf::Vector2f(originalBoxPos.x + offsetX, originalBoxPos.y + offsetY));
+    labelText->setPosition(sf::Vector2f(originalLabelPos.x + offsetX, originalLabelPos.y + offsetY));
+    inputText->setPosition(sf::Vector2f(originalInputPos.x + offsetX, originalInputPos.y + offsetY));
+    cursor.setPosition(sf::Vector2f(originalCursorPos.x + offsetX, originalCursorPos.y + offsetY));
+    
+    // Render at screen coordinates
     renderer.drawRectangle(inputBox);
     renderer.drawText(*labelText);
     renderer.drawText(*inputText);
@@ -52,12 +81,25 @@ void UITextInput::render(Renderer& renderer) {
     if (isFocused && cursorVisible) {
         renderer.drawRectangle(cursor);
     }
+    
+    // Restore original positions (so they remain consistent for next frame)
+    inputBox.setPosition(originalBoxPos);
+    labelText->setPosition(originalLabelPos);
+    inputText->setPosition(originalInputPos);
+    cursor.setPosition(originalCursorPos);
 }
 
 void UITextInput::handleMousePress(const sf::Vector2f& mousePos) {
     if (!initialized) return;
     
-    if (inputBox.getGlobalBounds().contains(mousePos)) {
+    // CRITICAL: Must use current screen position for hit detection, not initialize position
+    sf::Vector2f currentPos = getPosition();
+    sf::Vector2f currentSize = getSize();
+    
+    // Create bounds at current screen position
+    sf::FloatRect bounds(currentPos, currentSize);
+    
+    if (bounds.contains(mousePos)) {
         isFocused = true;
         cursorBlinkTime = 0.0f;
         cursorVisible = true;

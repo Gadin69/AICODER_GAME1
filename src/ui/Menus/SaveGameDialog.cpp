@@ -41,51 +41,62 @@ void SaveGameDialog::initialize(sf::RenderWindow& window) {
     float dialogX = (windowWidth - dialogWidth) / 2.0f;
     float dialogY = (windowHeight - dialogHeight) / 2.0f;
     dialogBorder.initialize(dialogX, dialogY, dialogWidth, dialogHeight);
+    dialogBorder.setBackgroundColor(sf::Color(40, 40, 50));  // Dark background
+    dialogBorder.setBorderColor(sf::Color(80, 80, 100));    // Border color
+    dialogBorder.setBorderThickness(2.0f);
+    
+    // CRITICAL: Add dialogBorder to mainBorder with absolute positioning
+    // dialogBorder already has its centered position from initialize()
+    mainBorder.addChild(&dialogBorder);
     
     // Initialize UITextInput for save name (relative to dialogBorder)
     saveNameInput.initialize(0, 0, dialogWidth - 80, 40, "Save Name:", font);
     saveNameInput.setText(SaveManager::getInstance().generateSaveName());
     saveNameInput.setMaxLength(50);
-    mainBorder.addChild(&saveNameInput, 
-                       (dialogX + 40) / windowWidth, 
-                       (dialogY + 60) / windowHeight,
-                       (dialogWidth - 80) / windowWidth, 
-                       40 / windowHeight);
+    // Add to dialogBorder with relative positioning
+    dialogBorder.addChild(&saveNameInput, 
+                         40.0f / dialogWidth,    // 40px from left as fraction of dialog width
+                         60.0f / dialogHeight,   // 60px from top as fraction of dialog height
+                         (dialogWidth - 80) / dialogWidth,  // width as fraction
+                         40.0f / dialogHeight);  // height as fraction
     
     // Initialize UITextInput for notes
     notesInput.initialize(0, 0, dialogWidth - 80, 80, "Notes (optional):", font);
     notesInput.setMaxLength(200);
-    mainBorder.addChild(&notesInput,
-                       (dialogX + 40) / windowWidth,
-                       (dialogY + 140) / windowHeight,
-                       (dialogWidth - 80) / windowWidth,
-                       80 / windowHeight);
+    // Add to dialogBorder with relative positioning
+    dialogBorder.addChild(&notesInput,
+                         40.0f / dialogWidth,     // 40px from left
+                         140.0f / dialogHeight,   // 140px from top
+                         (dialogWidth - 80) / dialogWidth,
+                         80.0f / dialogHeight);
     
     // Initialize Save button
     float buttonWidth = 120.0f;
     float buttonHeight = 40.0f;
-    float buttonY = dialogY + dialogHeight - 60;
+    float buttonY = dialogHeight - 60;  // 60px from bottom of dialog
     
     saveButton.initialize(0, 0, buttonWidth, buttonHeight, "Save", font);
     saveButton.setCallback([this]() {
         lastAction = MenuAction::ApplySettings;  // Reuse ApplySettings as Save action
     });
-    mainBorder.addChild(&saveButton,
-                       (dialogX + dialogWidth / 2.0f - buttonWidth - 10) / windowWidth,
-                       buttonY / windowHeight,
-                       buttonWidth / windowWidth,
-                       buttonHeight / windowHeight);
+    // Add to dialogBorder with relative positioning
+    dialogBorder.addChild(&saveButton,
+                         (dialogWidth / 2.0f - buttonWidth - 10) / dialogWidth,  // Left of center
+                         buttonY / dialogHeight,
+                         buttonWidth / dialogWidth,
+                         buttonHeight / dialogHeight);
     
     // Initialize Cancel button
     cancelButton.initialize(0, 0, buttonWidth, buttonHeight, "Cancel", font);
     cancelButton.setCallback([this]() {
         lastAction = MenuAction::Back;
     });
-    mainBorder.addChild(&cancelButton,
-                       (dialogX + dialogWidth / 2.0f + 10) / windowWidth,
-                       buttonY / windowHeight,
-                       buttonWidth / windowWidth,
-                       buttonHeight / windowHeight);
+    // Add to dialogBorder with relative positioning
+    dialogBorder.addChild(&cancelButton,
+                         (dialogWidth / 2.0f + 10) / dialogWidth,  // Right of center
+                         buttonY / dialogHeight,
+                         buttonWidth / dialogWidth,
+                         buttonHeight / dialogHeight);
     
     initialized = true;
     std::cout << "[SaveGameDialog] Save dialog initialized" << std::endl;

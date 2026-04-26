@@ -43,7 +43,7 @@ void PauseMenu::buildMenu() {
     mainBorder.initialize(0, 0, windowWidth, windowHeight);
     
     // Calculate button layout (centered on screen)
-    int buttonCount = 6;  // Resume, Save, Load, Settings, Quit to Main, Quit
+    int buttonCount = 5;  // Resume, Save, Load, Settings, Quit to Main
     float buttonWidth = windowWidth * 0.25f;
     float buttonHeight = windowHeight * 0.08f;
     float spacing = windowHeight * 0.03f;
@@ -92,15 +92,6 @@ void PauseMenu::buildMenu() {
         lastAction = MenuAction::QuitToMain;
     });
     mainBorder.addChild(&quitToMainBtn, centerX / windowWidth, startY / windowHeight,
-                       buttonWidth / windowWidth, buttonHeight / windowHeight);
-    startY += buttonHeight + spacing;
-    
-    // Quit button
-    quitBtn.initialize(0, 0, buttonWidth, buttonHeight, "Quit", font);
-    quitBtn.setCallback([this]() {
-        lastAction = MenuAction::Quit;
-    });
-    mainBorder.addChild(&quitBtn, centerX / windowWidth, startY / windowHeight,
                        buttonWidth / windowWidth, buttonHeight / windowHeight);
 }
 
