@@ -6,13 +6,18 @@ MainMenu::MainMenu() {
 }
 
 MainMenu::~MainMenu() {
+    if (continueButton) {
+        delete continueButton;
+        continueButton = nullptr;
+    }
 }
 
 void MainMenu::initialize(sf::RenderWindow& window) {
     this->window = &window;
     
     if (!font.openFromFile("assets/fonts/arial.ttf")) {
-        std::cerr << "ERROR: Failed to load font 'assets/fonts/arial.ttf'" << std::endl;
+        std::cerr << "ERROR: MainMenu failed to load font 'assets/fonts/arial.ttf'" << std::endl;
+        std::cerr << "ERROR: Current working directory: " << std::filesystem::current_path() << std::endl;
         return;
     }
     
@@ -30,53 +35,73 @@ void MainMenu::buildMenu() {
         return;
     }
     
+    checkForRecentSave();
+    
     // Get actual window size
     sf::Vector2u windowSize = window->getSize();
     lastWindowSize = windowSize;  // Update tracked size
-    float windowWidth = static_cast<float>(windowSize.x);
-    float windowHeight = static_cast<float>(windowSize.y);
+    windowWidth = static_cast<float>(windowSize.x);
+    windowHeight = static_cast<float>(windowSize.y);
     
-    // Scale UI elements based on window size
-    float buttonWidth = windowWidth * 0.25f;  // 25% of window width
-    float buttonHeight = windowHeight * 0.08f; // 8% of window height
+    // CRITICAL: Clear previous children before rebuilding
+    mainBorder.clearChildren();
+    
+    // Initialize main border (full screen)
+    mainBorder.initialize(0, 0, windowWidth, windowHeight);
+    
+    // Calculate button layout (centered on screen)
+    int buttonCount = hasRecentSave ? 5 : 4;
+    float buttonWidth = windowWidth * 0.25f;  // 25% of screen width
+    float buttonHeight = windowHeight * 0.08f; // 8% of screen height
     float spacing = windowHeight * 0.03f;
-    float startY = windowHeight / 2.0f - buttonHeight * 1.5f - spacing;
+    float startY = windowHeight / 2.0f - (buttonHeight * buttonCount + spacing * (buttonCount - 1)) / 2.0f;
+    float centerX = (windowWidth - buttonWidth) / 2.0f;
     
-    // Scale font size based on window height
-    unsigned int fontSize = static_cast<unsigned int>(windowHeight * 0.035f);
+    // Continue button (if save exists)
+    if (hasRecentSave && continueButton) {
+        continueButton->initialize(0, 0, buttonWidth, buttonHeight, "Continue", font);
+        continueButton->setCallback([this]() {
+            lastAction = MenuAction::Continue;
+        });
+        mainBorder.addChild(continueButton, centerX / windowWidth, startY / windowHeight, 
+                           buttonWidth / windowWidth, buttonHeight / windowHeight);
+        startY += buttonHeight + spacing;
+    }
     
     // Play button
-    playButton.initialize(
-        (windowWidth - buttonWidth) / 2.0f,
-        startY,
-        buttonWidth, buttonHeight,
-        "Play", font
-    );
+    playButton.initialize(0, 0, buttonWidth, buttonHeight, "Play", font);
     playButton.setCallback([this]() {
         lastAction = MenuAction::Play;
     });
+    mainBorder.addChild(&playButton, centerX / windowWidth, startY / windowHeight,
+                       buttonWidth / windowWidth, buttonHeight / windowHeight);
+    startY += buttonHeight + spacing;
+    
+    // Load button
+    loadButton.initialize(0, 0, buttonWidth, buttonHeight, "Load Game", font);
+    loadButton.setCallback([this]() {
+        lastAction = MenuAction::LoadGame;
+    });
+    mainBorder.addChild(&loadButton, centerX / windowWidth, startY / windowHeight,
+                       buttonWidth / windowWidth, buttonHeight / windowHeight);
+    startY += buttonHeight + spacing;
     
     // Settings button
-    settingsButton.initialize(
-        (windowWidth - buttonWidth) / 2.0f,
-        startY + buttonHeight + spacing,
-        buttonWidth, buttonHeight,
-        "Settings", font
-    );
+    settingsButton.initialize(0, 0, buttonWidth, buttonHeight, "Settings", font);
     settingsButton.setCallback([this]() {
         lastAction = MenuAction::Settings;
     });
+    mainBorder.addChild(&settingsButton, centerX / windowWidth, startY / windowHeight,
+                       buttonWidth / windowWidth, buttonHeight / windowHeight);
+    startY += buttonHeight + spacing;
     
     // Quit button
-    quitButton.initialize(
-        (windowWidth - buttonWidth) / 2.0f,
-        startY + (buttonHeight + spacing) * 2,
-        buttonWidth, buttonHeight,
-        "Quit", font
-    );
+    quitButton.initialize(0, 0, buttonWidth, buttonHeight, "Quit", font);
     quitButton.setCallback([this]() {
         lastAction = MenuAction::Quit;
     });
+    mainBorder.addChild(&quitButton, centerX / windowWidth, startY / windowHeight,
+                       buttonWidth / windowWidth, buttonHeight / windowHeight);
 }
 
 void MainMenu::render(Renderer& renderer) {
@@ -85,44 +110,11 @@ void MainMenu::render(Renderer& renderer) {
     // Check if window size changed and rebuild menu if needed
     sf::Vector2u currentWindowSize = window->getSize();
     if (lastWindowSize.x != currentWindowSize.x || lastWindowSize.y != currentWindowSize.y) {
-        lastWindowSize = currentWindowSize;
-        buildMenu();  // Rebuild to recenter buttons
+        buildMenu();
     }
     
-    sf::Vector2i sfMousePos = sf::Mouse::getPosition(*window);
-    mousePos = sf::Vector2f(static_cast<float>(sfMousePos.x), static_cast<float>(sfMousePos.y));
-    
-    // Update button hover states
-    playButton.handleMouseMove(mousePos);
-    settingsButton.handleMouseMove(mousePos);
-    quitButton.handleMouseMove(mousePos);
-    
-    // Get actual window size
-    sf::Vector2u windowSize = window->getSize();
-    float windowWidth = static_cast<float>(windowSize.x);
-    float windowHeight = static_cast<float>(windowSize.y);
-    
-    // Render semi-transparent background
-    sf::RectangleShape bgShape(sf::Vector2f(windowWidth, windowHeight));
-    bgShape.setFillColor(sf::Color(0, 0, 0, 180));
-    bgShape.setPosition(sf::Vector2f(0, 0));
-    renderer.drawRectangle(bgShape);
-    
-    // Render title - scale font based on window height
-    unsigned int titleFontSize = static_cast<unsigned int>(windowHeight * 0.07f);
-    sf::Text title(font, "ONI-like Simulation", titleFontSize);
-    title.setFillColor(sf::Color(100, 200, 255));
-    auto titleBounds = title.getLocalBounds();
-    title.setPosition(sf::Vector2f(
-        (windowWidth - titleBounds.size.x) / 2.0f,
-        windowHeight * 0.2f
-    ));
-    renderer.drawText(title);
-    
-    // Render buttons
-    playButton.render(renderer);
-    settingsButton.render(renderer);
-    quitButton.render(renderer);
+    // Render main border (contains all buttons and background)
+    mainBorder.render(renderer);
 }
 
 MenuAction MainMenu::handleEvent(const sf::Event& event) {
@@ -136,25 +128,32 @@ MenuAction MainMenu::handleEvent(const sf::Event& event) {
         if (mouseButton && mouseButton->button == sf::Mouse::Button::Left) {
             sf::Vector2i sfMousePos = sf::Mouse::getPosition(*window);
             sf::Vector2f clickPos(static_cast<float>(sfMousePos.x), static_cast<float>(sfMousePos.y));
-            
-            // Route mouse press to buttons
-            playButton.handleMousePress(clickPos);
-            settingsButton.handleMousePress(clickPos);
-            quitButton.handleMousePress(clickPos);
+            mainBorder.handleMousePress(clickPos);
         }
     } else if (event.is<sf::Event::MouseButtonReleased>()) {
         auto mouseButton = event.getIf<sf::Event::MouseButtonReleased>();
         if (mouseButton && mouseButton->button == sf::Mouse::Button::Left) {
-            sf::Vector2i sfMousePos = sf::Mouse::getPosition(*window);
-            sf::Vector2f clickPos(static_cast<float>(sfMousePos.x), static_cast<float>(sfMousePos.y));
-            
-            // Route mouse release to buttons (triggers callbacks)
-            playButton.handleMouseRelease();
-            settingsButton.handleMouseRelease();
-            quitButton.handleMouseRelease();
+            mainBorder.handleMouseRelease();
+        }
+    } else if (event.is<sf::Event::MouseMoved>()) {
+        auto mouseMove = event.getIf<sf::Event::MouseMoved>();
+        if (mouseMove) {
+            sf::Vector2f pos(static_cast<float>(mouseMove->position.x), static_cast<float>(mouseMove->position.y));
+            mainBorder.handleMouseMove(pos);
         }
     }
     
     return lastAction;
+}
+
+void MainMenu::checkForRecentSave() {
+    hasRecentSave = SaveManager::getInstance().hasRecentSave();
+    
+    if (hasRecentSave && !continueButton) {
+        continueButton = new UIButton();
+    } else if (!hasRecentSave && continueButton) {
+        delete continueButton;
+        continueButton = nullptr;
+    }
 }
 

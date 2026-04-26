@@ -41,6 +41,38 @@ void UIButton::render(Renderer& renderer) {
     renderer.drawText(*buttonText);
 }
 
+void UIButton::setPosition(float x, float y) {
+    // Call base class to update position variable
+    UIElement::setPosition(x, y);
+    
+    // Update SFML background shape position
+    background.setPosition(sf::Vector2f(x, y));
+    
+    // Update text position (maintain centering)
+    if (buttonText) {
+        sf::FloatRect textBounds = buttonText->getLocalBounds();
+        float textX = x + (getSize().x - textBounds.size.x) / 2.0f;
+        float textY = y + (getSize().y - textBounds.size.y) / 2.0f - textBounds.position.y;
+        buttonText->setPosition(sf::Vector2f(textX, textY));
+    }
+}
+
+void UIButton::setSize(float width, float height) {
+    // Call base class to update size variable
+    UIElement::setSize(width, height);
+    
+    // Update SFML background shape size
+    background.setSize(sf::Vector2f(width, height));
+    
+    // Update text position (re-center with new size)
+    if (buttonText) {
+        sf::FloatRect textBounds = buttonText->getLocalBounds();
+        float textX = getPosition().x + (width - textBounds.size.x) / 2.0f;
+        float textY = getPosition().y + (height - textBounds.size.y) / 2.0f - textBounds.position.y;
+        buttonText->setPosition(sf::Vector2f(textX, textY));
+    }
+}
+
 void UIButton::handleMousePress(const sf::Vector2f& mousePos) {
     if (!initialized) return;
     

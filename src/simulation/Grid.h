@@ -3,6 +3,7 @@
 #include "Cell.h"
 #include <vector>
 #include <mutex>
+#include <string>
 
 class Grid {
 public:
@@ -36,6 +37,10 @@ public:
     // Thread-safe operations for main thread (mouse input, etc.)
     void lock() { gridMutex.lock(); }
     void unlock() { gridMutex.unlock(); }
+    
+    // Save/Load functionality
+    bool saveToFile(const std::string& filePath) const;
+    bool loadFromFile(const std::string& filePath);
 
 private:
     int width;

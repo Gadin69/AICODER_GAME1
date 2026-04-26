@@ -15,6 +15,9 @@ public:
     void initialize(float x, float y, float width, float height, const std::string& text, const sf::Font& font);
     void render(Renderer& renderer) override;
     
+    void setPosition(float x, float y) override;
+    void setSize(float width, float height) override;
+    
     void handleMousePress(const sf::Vector2f& mousePos) override;
     void handleMouseMove(const sf::Vector2f& mousePos) override;
     void handleMouseRelease() override;

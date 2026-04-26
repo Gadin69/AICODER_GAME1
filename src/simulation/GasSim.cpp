@@ -74,7 +74,7 @@ bool GasSim::update(float deltaTime) {
     // ALWAYS print first tick to confirm GasSim is running
     static bool firstTick = true;
     if (firstTick) {
-        std::cerr << "[GAS] GasSim::update() CALLED! enabled=" << enabled << " grid=" << (grid != nullptr) << std::endl;
+        // std::cerr << "[GAS] GasSim::update() CALLED! enabled=" << enabled << " grid=" << (grid != nullptr) << std::endl;
         firstTick = false;
     }
     
@@ -149,9 +149,9 @@ bool GasSim::update(float deltaTime) {
     static int summaryTick = 0;
     summaryTick++;
     if (summaryTick % 30 == 0) {
-        std::cerr << "[GAS SUMMARY] Total=" << gasCellsFound 
-                  << " WithMass=" << gasCellsWithMass
-                  << " NoMass=" << gasCellsWithoutMass << std::endl;
+        // std::cerr << "[GAS SUMMARY] Total=" << gasCellsFound
+        //           << " WithMass=" << gasCellsWithMass
+        //           << " NoMass=" << gasCellsWithoutMass << std::endl;
     }
     
     // ========== OLD EXPANSION SYSTEM - DISABLED (replaced by new STEP 4 flow algorithm below) ==========
@@ -1240,17 +1240,17 @@ bool GasSim::update(float deltaTime) {
         float totalMass = totalGasMass + totalLiquidMass + totalSolidMass;
         
         // ALWAYS log to console for visibility
-        std::cout << "[MASS AUDIT] Gas: " << totalGasMass << "kg (" << gasCellCount 
-                  << ") | Liquid: " << totalLiquidMass << "kg (" << liquidCellCount
-                  << ") | Solid: " << totalSolidMass << "kg (" << solidCellCount
-                  << ") | TOTAL: " << totalMass << "kg";
+        // std::cout << "[MASS AUDIT] Gas: " << totalGasMass << "kg (" << gasCellCount 
+        //           << ") | Liquid: " << totalLiquidMass << "kg (" << liquidCellCount
+        //           << ") | Solid: " << totalSolidMass << "kg (" << solidCellCount
+        //           << ") | TOTAL: " << totalMass << "kg";
         
         // Log to file and console if mass changed significantly (> 0.01kg difference)
         if (lastTotalMass > 0.0f && std::abs(totalMass - lastTotalMass) > 0.01f) {
             float massDiff = totalMass - lastTotalMass;
             float percentChange = (massDiff / lastTotalMass) * 100.0f;
             
-            std::cout << " | Change: " << massDiff << "kg (" << percentChange << "%)";
+            // std::cout << " | Change: " << massDiff << "kg (" << percentChange << "%)";
             
             // Write to file with timestamp
             auto now = std::chrono::system_clock::now();
@@ -1266,7 +1266,7 @@ bool GasSim::update(float deltaTime) {
                      << "kg | Solid: " << totalSolidMass << "kg | TOTAL: " << totalMass << "kg" << std::endl;
         }
         
-        std::cout << std::endl;
+        // std::cout << std::endl;
         
         // Always log to file for tracking
         if (totalMass > 0.0f) {
@@ -1282,8 +1282,8 @@ bool GasSim::update(float deltaTime) {
     static int summaryCounter = 0;
     summaryCounter++;
     if (summaryCounter % 60 == 0) {  // Every 60 ticks (~1 second)
-        std::cerr << "[GAS SUMMARY] Tick " << summaryCounter << ": Found " << totalGasCellsFound 
-                  << " gas cells, " << totalOvermassCellsFound << " over-mass" << std::endl;
+        // std::cerr << "[GAS SUMMARY] Tick " << summaryCounter << ": Found " << totalGasCellsFound
+        //           << " gas cells, " << totalOvermassCellsFound << " over-mass" << std::endl;
     }
     
     return true;

@@ -6,14 +6,15 @@
 
 class Renderer;  // Forward declaration
 
-class UIBorder {
+class UIBorder : public UIElement {
 public:
     UIBorder();
-    ~UIBorder();
+    ~UIBorder() override;
     
     void initialize(float x, float y, float width, float height);
     void setSize(float width, float height);  // Resizes and scales children
     void setPosition(float x, float y);
+    void setBackgroundColor(const sf::Color& color);  // Set border background color
     
     // NEW: Add polymorphic UIElement child (preferred method)
     void addChild(UIElement* child, float relX, float relY, float relWidth, float relHeight);
@@ -26,7 +27,7 @@ public:
     void addPopupChild(sf::RectangleShape* child);
     void addPopupChild(sf::Text* child);
     
-    void render(Renderer& renderer);
+    void render(Renderer& renderer) override;
     
     // Mouse event handling - propagates to all UIElement children
     void handleMousePress(const sf::Vector2f& mousePos);
@@ -41,6 +42,7 @@ public:
     sf::Vector2f getSize() const;
     bool containsPoint(const sf::Vector2f& point) const;  // Hit testing
     void clearChildren();  // Remove all children (for dynamic content switching)
+    size_t getChildCount() const { return uiElementChildren.size(); }  // Debug: count children
     
     bool initialized = false;
     

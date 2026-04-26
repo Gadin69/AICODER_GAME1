@@ -25,6 +25,10 @@ void UIBorder::setPosition(float x, float y) {
     updateChildPositions();  // Reposition all children
 }
 
+void UIBorder::setBackgroundColor(const sf::Color& color) {
+    border.setFillColor(color);
+}
+
 // NEW: Add polymorphic UIElement child
 void UIBorder::addChild(UIElement* child, float relX, float relY, float relWidth, float relHeight) {
     if (!child) return;

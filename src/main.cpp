@@ -9,13 +9,16 @@
 #include "ui/MainMenu.h"
 #include "ui/SettingsMenu.h"
 #include "ui/PauseMenu.h"
+#include "ui/LoadGameMenu.h"
+#include "ui/SaveGameDialog.h"
 #include "ui/GameConsole.h"
 #include "ui/GameGUI.h"
 #include "ecs/Entity.h"
 #include "ui/UISlider.h"
+#include "save/SaveManager.h"
 #include <SFML/Graphics.hpp>
 
-#define DEBUG_MODE false  // Set to true to enable debug console output
+#define DEBUG_MODE true  // Set to true to enable debug console output
 #define DEVELOPER_MODE true  // Set to true to enable admin/dev tools (sliders, overlays, etc.)
 
 // Global debug print toggle (can be controlled via console)
@@ -32,6 +35,8 @@ SimulationManager simManager;
 MainMenu mainMenu;
 SettingsMenu settingsMenu;
 PauseMenu pauseMenu;
+LoadGameMenu loadGameMenu;
+SaveGameDialog saveGameDialog;
 
 enum class GameState {
     Menu,
@@ -41,6 +46,8 @@ enum class GameState {
 };
 GameState gameState = GameState::Menu;
 bool simulationInitialized = false;
+bool showLoadMenu = false;
+bool showSaveDialog = false;
 
 ElementType currentElement = ElementType::Liquid_Water;
 sf::Font font;
@@ -250,18 +257,38 @@ void handleMouseInput(const sf::Event& event) {
         return;
     }
     
+    // BLOCK all game input when save/load menus are active
+    if (showSaveDialog || showLoadMenu) {
+        return;  // Don't process any game input
+    }
+    
     // Block mouse input when over GameGUI elements (skillbar, etc.)
+    // Only block mouse input if clicking on UI, but still process keyboard events
+    bool isOverUI = false;
     if (gameGUI && (gameState == GameState::Playing || gameState == GameState::Paused)) {
         if (event.is<sf::Event::MouseButtonPressed>()) {
             auto mouseButton = event.getIf<sf::Event::MouseButtonPressed>();
             if (mouseButton) {
                 sf::Vector2f mousePos(mouseButton->position.x, mouseButton->position.y);
                 if (gameGUI->isMouseOverUI(mousePos)) {
-                    // Mouse is over UI border - block game input
-                    return;
+                    // Mouse is over UI - block game mouse input but still process keyboard
+                    isOverUI = true;
                 }
             }
         }
+    }
+    
+    // Block mouse placement when clicking on UI
+    if (isOverUI && event.is<sf::Event::MouseButtonPressed>()) {
+        return;
+    }
+    
+    if (isOverUI && event.is<sf::Event::MouseButtonReleased>()) {
+        return;
+    }
+    
+    if (isOverUI && event.is<sf::Event::MouseMoved>()) {
+        return;
     }
     
     if (event.is<sf::Event::MouseButtonPressed>()) {
@@ -302,6 +329,7 @@ void handleMouseInput(const sf::Event& event) {
         extern bool isAdminMode;
         auto textEvent = event.getIf<sf::Event::TextEntered>();
         if (isAdminMode && gameGUI && gameGUI->getElementSelector() && textEvent) {
+            if (DEBUG_MODE) std::cout << "[main.cpp] Forwarding TextEntered: unicode=" << textEvent->unicode << std::endl;
             gameGUI->getElementSelector()->handleTextEntered(*textEvent);
         }
     }
@@ -438,14 +466,14 @@ void placeCellAtMouse(sf::Mouse::Button button) {
         // THREAD-SAFE: Lock grid before clearing cells
         simGrid.lock();
         
-        // Clear cell
-        simGrid.setCellType(tileX, tileY, ElementType::Empty);
+        // Clear cell - place Vacuum instead of Empty (Vacuum is a valid sim element)
+        simGrid.setCellType(tileX, tileY, ElementType::Vacuum);
         
-        TileInfo emptyTile;
-        emptyTile.color = sf::Color::Transparent;
-        emptyTile.solid = false;
-        emptyTile.name = "Empty";
-        tileMap.setTile(tileX, tileY, emptyTile);
+        TileInfo vacuumTile;
+        vacuumTile.color = sf::Color::Black;
+        vacuumTile.solid = false;
+        vacuumTile.name = "Vacuum";
+        tileMap.setTile(tileX, tileY, vacuumTile);
         
         // UNLOCK grid
         simGrid.unlock();
@@ -786,6 +814,9 @@ int main() {
         
         // Initialize menus
         try {
+            // Initialize SaveManager first
+            SaveManager::getInstance().initialize();
+            
             std::cout << "[INIT] Initializing mainMenu..." << std::endl;
             mainMenu.initialize(renderer.getRenderWindow());
             std::cout << "[INIT] Initializing settingsMenu..." << std::endl;
@@ -815,6 +846,22 @@ int main() {
         
         // Set up callbacks
         engine.onEvent = [&engine](const sf::Event& event) {
+            // Route keyboard events to save/load dialogs if active
+            if (showSaveDialog) {
+                if (event.is<sf::Event::KeyPressed>()) {
+                    auto keyEvent = event.getIf<sf::Event::KeyPressed>();
+                    if (keyEvent) {
+                        saveGameDialog.handleKeyPress(*keyEvent);
+                    }
+                }
+                if (event.is<sf::Event::TextEntered>()) {
+                    auto textEvent = event.getIf<sf::Event::TextEntered>();
+                    if (textEvent) {
+                        saveGameDialog.handleTextEntered(*textEvent);
+                    }
+                }
+            }
+            
             // Route events based on game state
             if (gameState == GameState::Menu) {
                 // Main menu
@@ -826,6 +873,17 @@ int main() {
                         initializeDemo();
                         simulationInitialized = true;
                     }
+                } else if (action == MenuAction::Continue) {
+                    std::string recentPath = SaveManager::getInstance().getRecentSavePath();
+                    if (!recentPath.empty() && simGrid.loadFromFile(recentPath)) {
+                        gameState = GameState::Playing;
+                        simulationInitialized = true;
+                    }
+                } else if (action == MenuAction::LoadGame) {
+                    showLoadMenu = true;
+                    loadGameMenu.initialize(renderer.getRenderWindow());
+                    loadGameMenu.setCameFromMainMenu(true);  // Track source
+                    gameState = GameState::Paused;  // Use Paused state to show load menu
                 } else if (action == MenuAction::Settings) {
                     gameState = GameState::Settings;
                 } else if (action == MenuAction::Quit) {
@@ -866,15 +924,64 @@ int main() {
                     }
                 }
             } else if (gameState == GameState::Paused) {
-                // Pause menu
-                MenuAction action = pauseMenu.handleEvent(event);
-                
-                if (action == MenuAction::Resume) {
-                    gameState = GameState::Playing;
-                } else if (action == MenuAction::Settings) {
-                    gameState = GameState::Settings;
-                } else if (action == MenuAction::QuitToMain) {
-                    engine.stop();
+                // Handle save/load menus first
+                if (showSaveDialog) {
+                    MenuAction dialogAction = saveGameDialog.handleEvent(event);
+                    if (dialogAction == MenuAction::ApplySettings) {  // Save action
+                        std::string saveName = saveGameDialog.getSaveName();
+                        std::string notes = saveGameDialog.getNotes();
+                        
+                        // Save the grid
+                        std::string datPath = SaveManager::getInstance().getSaveDirectory() + "/" + saveName + ".dat";
+                        if (simGrid.saveToFile(datPath)) {
+                            std::cout << "[Save] Game saved successfully: " << saveName << std::endl;
+                        }
+                        showSaveDialog = false;
+                        gameState = GameState::Paused;
+                    } else if (dialogAction == MenuAction::Back) {
+                        showSaveDialog = false;
+                        gameState = GameState::Paused;
+                    }
+                } else if (showLoadMenu) {
+                    MenuAction loadAction = loadGameMenu.handleEvent(event);
+                    if (loadAction == MenuAction::Play) {  // Load action
+                        std::string path = loadGameMenu.getSelectedSavePath();
+                        if (!path.empty() && simGrid.loadFromFile(path)) {
+                            std::cout << "[Load] Game loaded successfully" << std::endl;
+                            showLoadMenu = false;
+                            gameState = GameState::Playing;
+                            simulationInitialized = true;
+                        }
+                    } else if (loadAction == MenuAction::Back) {
+                        std::cout << "[Main] Received Back action from LoadGameMenu" << std::endl;
+                        showLoadMenu = false;
+                        
+                        // Return to correct state based on where we came from
+                        if (loadGameMenu.getCameFromMainMenu()) {
+                            gameState = GameState::Menu;
+                        } else {
+                            gameState = GameState::Paused;
+                        }
+                    }
+                } else {
+                    // Normal pause menu handling
+                    MenuAction action = pauseMenu.handleEvent(event);
+                    
+                    if (action == MenuAction::Resume) {
+                        gameState = GameState::Playing;
+                    } else if (action == MenuAction::SaveGame) {
+                        showSaveDialog = true;
+                        saveGameDialog.initialize(renderer.getRenderWindow());
+                    } else if (action == MenuAction::LoadGame) {
+                        showLoadMenu = true;
+                        loadGameMenu.initialize(renderer.getRenderWindow());
+                        loadGameMenu.setCameFromMainMenu(false);  // Came from pause menu
+                    } else if (action == MenuAction::Settings) {
+                        gameState = GameState::Settings;
+                    } else if (action == MenuAction::QuitToMain) {
+                        gameState = GameState::Menu;
+                        simulationInitialized = false;  // Reset simulation state
+                    }
                 }
             } else {
                 // GAME PLAYING STATE - handle game input
@@ -1108,7 +1215,15 @@ int main() {
                     // FIXED: Reset view to screen coordinates before rendering pause menu overlay
                     sf::View defaultView = renderer.getRenderWindow().getDefaultView();
                     renderer.getRenderWindow().setView(defaultView);
-                    pauseMenu.render(renderer);
+                    
+                    // Render save/load menus on top
+                    if (showSaveDialog) {
+                        saveGameDialog.render(renderer);
+                    } else if (showLoadMenu) {
+                        loadGameMenu.render(renderer);
+                    } else {
+                        pauseMenu.render(renderer);
+                    }
                 } else if (gameState == GameState::Settings) {
                     if (simulationInitialized) {
                         renderDemo();

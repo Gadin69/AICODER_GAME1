@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(GameEngine VERSION 0.1.0 LANGUAGES CXX)
+project(ONI_Simulation VERSION 0.1.0 LANGUAGES CXX)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -55,6 +55,9 @@ set(SOURCES
     src/ui/UIElement.cpp
     src/ui/UIElementSelector.cpp
     src/ui/GameGUI.cpp
+    src/save/SaveManager.cpp
+    src/ui/LoadGameMenu.cpp
+    src/ui/SaveGameDialog.cpp
 )
 
 # Header files
@@ -109,6 +112,9 @@ set(HEADERS
     src/ui/UIElement.h
     src/ui/UIElementSelector.h
     src/ui/GameGUI.h
+    src/save/SaveManager.h
+    src/ui/LoadGameMenu.h
+    src/ui/SaveGameDialog.h
 )
 
 # Create executable

@@ -3,11 +3,12 @@
 #include "core/Window.h"
 #include "core/Settings.h"
 #include "rendering/Renderer.h"
+#include "UIButton.h"
+#include "UIBorder.h"
+#include "MainMenu.h"  // For MenuAction enum
 #include <SFML/Graphics.hpp>
 #include <vector>
 #include <string>
-
-enum class MenuAction; // Forward declaration
 
 class PauseMenu {
 public:
@@ -21,49 +22,27 @@ public:
     MenuAction handleEvent(const sf::Event& event);
 
 private:
-    struct Button {
-        sf::RectangleShape background;
-        sf::Text* text = nullptr;
-        std::string label;
-        bool isHovered = false;
-        
-        Button() = default;
-        ~Button() { delete text; }
-        
-        Button(Button&& other) noexcept 
-            : background(std::move(other.background)),
-              text(other.text),
-              label(std::move(other.label)),
-              isHovered(other.isHovered) {
-            other.text = nullptr;
-        }
-        
-        Button& operator=(Button&& other) noexcept {
-            if (this != &other) {
-                delete text;
-                background = std::move(other.background);
-                text = other.text;
-                label = std::move(other.label);
-                isHovered = other.isHovered;
-                other.text = nullptr;
-            }
-            return *this;
-        }
-        
-        Button(const Button&) = delete;
-        Button& operator=(const Button&) = delete;
-    };
-    
     void buildMenu();
-    void renderButtons(Renderer& renderer);
-    bool isMouseOverButton(const Button& btn, const sf::Vector2f& mousePos);
-    void updateButtonHover(const sf::Vector2f& mousePos);
     
     sf::Font font;
     sf::RenderWindow* window = nullptr;
-    std::vector<Button> buttons;
-    bool initialized = false;
     
-    sf::Vector2f mousePos;
+    // Layout borders
+    UIBorder mainBorder;           // Full-screen container
+    UIBorder centerButtonBorder;   // Centered button container
+    
+    // Buttons
+    UIButton resumeButton;
+    UIButton saveButton;
+    UIButton loadButton;
+    UIButton settingsButton;
+    UIButton quitToMainBtn;
+    UIButton quitBtn;
+    
+    bool initialized = false;
+    MenuAction lastAction = MenuAction::None;
+    
     sf::Vector2u lastWindowSize;  // Track window size to detect changes
+    float windowWidth = 0.0f;
+    float windowHeight = 0.0f;
 };

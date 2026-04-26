@@ -25,8 +25,6 @@ bool PauseMenu::isInitialized() const {
 }
 
 void PauseMenu::buildMenu() {
-    buttons.clear();
-    
     if (!initialized) {
         std::cerr << "ERROR: buildMenu called but menu not initialized" << std::endl;
         return;
@@ -34,42 +32,76 @@ void PauseMenu::buildMenu() {
     
     // Get actual window size
     sf::Vector2u windowSize = window->getSize();
-    lastWindowSize = windowSize;  // Update tracked size
-    float windowWidth = static_cast<float>(windowSize.x);
-    float windowHeight = static_cast<float>(windowSize.y);
+    lastWindowSize = windowSize;
+    windowWidth = static_cast<float>(windowSize.x);
+    windowHeight = static_cast<float>(windowSize.y);
     
-    // Scale UI elements
+    // CRITICAL: Clear previous children before rebuilding
+    mainBorder.clearChildren();
+    
+    // Initialize main border (full screen)
+    mainBorder.initialize(0, 0, windowWidth, windowHeight);
+    
+    // Calculate button layout (centered on screen)
+    int buttonCount = 6;  // Resume, Save, Load, Settings, Quit to Main, Quit
     float buttonWidth = windowWidth * 0.25f;
     float buttonHeight = windowHeight * 0.08f;
     float spacing = windowHeight * 0.03f;
-    float startY = windowHeight / 2.0f - buttonHeight * 1.5f - spacing;
-    unsigned int fontSize = static_cast<unsigned int>(windowHeight * 0.035f);
+    float startY = windowHeight / 2.0f - (buttonHeight * buttonCount + spacing * (buttonCount - 1)) / 2.0f;
+    float centerX = (windowWidth - buttonWidth) / 2.0f;
     
-    std::vector<std::string> labels = {"Resume", "Settings", "Quit to Main"};
+    // Resume button
+    resumeButton.initialize(0, 0, buttonWidth, buttonHeight, "Resume", font);
+    resumeButton.setCallback([this]() {
+        lastAction = MenuAction::Resume;
+    });
+    mainBorder.addChild(&resumeButton, centerX / windowWidth, startY / windowHeight,
+                       buttonWidth / windowWidth, buttonHeight / windowHeight);
+    startY += buttonHeight + spacing;
     
-    for (size_t i = 0; i < labels.size(); ++i) {
-        Button btn;
-        btn.label = labels[i];
-        btn.background.setSize(sf::Vector2f(buttonWidth, buttonHeight));
-        btn.background.setPosition(sf::Vector2f(
-            (windowWidth - buttonWidth) / 2.0f,
-            startY + i * (buttonHeight + spacing)
-        ));
-        btn.background.setFillColor(sf::Color(50, 50, 50));
-        btn.background.setOutlineColor(sf::Color(100, 100, 100));
-        btn.background.setOutlineThickness(2.0f);
-        
-        btn.text = new sf::Text(font, labels[i], fontSize);
-        btn.text->setFillColor(sf::Color::White);
-        
-        auto textBounds = btn.text->getLocalBounds();
-        btn.text->setPosition(sf::Vector2f(
-            btn.background.getPosition().x + (buttonWidth - textBounds.size.x) / 2.0f,
-            btn.background.getPosition().y + (buttonHeight - textBounds.size.y) / 2.0f
-        ));
-        
-        buttons.push_back(std::move(btn));
-    }
+    // Save Game button
+    saveButton.initialize(0, 0, buttonWidth, buttonHeight, "Save Game", font);
+    saveButton.setCallback([this]() {
+        lastAction = MenuAction::SaveGame;
+    });
+    mainBorder.addChild(&saveButton, centerX / windowWidth, startY / windowHeight,
+                       buttonWidth / windowWidth, buttonHeight / windowHeight);
+    startY += buttonHeight + spacing;
+    
+    // Load Game button
+    loadButton.initialize(0, 0, buttonWidth, buttonHeight, "Load Game", font);
+    loadButton.setCallback([this]() {
+        lastAction = MenuAction::LoadGame;
+    });
+    mainBorder.addChild(&loadButton, centerX / windowWidth, startY / windowHeight,
+                       buttonWidth / windowWidth, buttonHeight / windowHeight);
+    startY += buttonHeight + spacing;
+    
+    // Settings button
+    settingsButton.initialize(0, 0, buttonWidth, buttonHeight, "Settings", font);
+    settingsButton.setCallback([this]() {
+        lastAction = MenuAction::Settings;
+    });
+    mainBorder.addChild(&settingsButton, centerX / windowWidth, startY / windowHeight,
+                       buttonWidth / windowWidth, buttonHeight / windowHeight);
+    startY += buttonHeight + spacing;
+    
+    // Quit to Main button
+    quitToMainBtn.initialize(0, 0, buttonWidth, buttonHeight, "Quit to Main", font);
+    quitToMainBtn.setCallback([this]() {
+        lastAction = MenuAction::QuitToMain;
+    });
+    mainBorder.addChild(&quitToMainBtn, centerX / windowWidth, startY / windowHeight,
+                       buttonWidth / windowWidth, buttonHeight / windowHeight);
+    startY += buttonHeight + spacing;
+    
+    // Quit button
+    quitBtn.initialize(0, 0, buttonWidth, buttonHeight, "Quit", font);
+    quitBtn.setCallback([this]() {
+        lastAction = MenuAction::Quit;
+    });
+    mainBorder.addChild(&quitBtn, centerX / windowWidth, startY / windowHeight,
+                       buttonWidth / windowWidth, buttonHeight / windowHeight);
 }
 
 void PauseMenu::render(Renderer& renderer) {
@@ -78,86 +110,37 @@ void PauseMenu::render(Renderer& renderer) {
     // Check if window size changed and rebuild menu if needed
     sf::Vector2u currentWindowSize = window->getSize();
     if (lastWindowSize.x != currentWindowSize.x || lastWindowSize.y != currentWindowSize.y) {
-        lastWindowSize = currentWindowSize;
-        buildMenu();  // Rebuild to recenter buttons
+        buildMenu();
     }
     
-    sf::Vector2i sfMousePos = sf::Mouse::getPosition(*window);
-    mousePos = sf::Vector2f(static_cast<float>(sfMousePos.x), static_cast<float>(sfMousePos.y));
-    
-    updateButtonHover(mousePos);
-    
-    sf::Vector2u windowSize = window->getSize();
-    float windowWidth = static_cast<float>(windowSize.x);
-    float windowHeight = static_cast<float>(windowSize.y);
-    
-    sf::RectangleShape bgShape(sf::Vector2f(windowWidth, windowHeight));
-    bgShape.setFillColor(sf::Color(0, 0, 0, 150));
-    bgShape.setPosition(sf::Vector2f(0, 0));
-    renderer.drawRectangle(bgShape);
-    
-    unsigned int titleFontSize = static_cast<unsigned int>(windowHeight * 0.07f);
-    sf::Text title(font, "PAUSED", titleFontSize);
-    title.setFillColor(sf::Color(255, 200, 100));
-    auto titleBounds = title.getLocalBounds();
-    title.setPosition(sf::Vector2f(
-        (windowWidth - titleBounds.size.x) / 2.0f,
-        windowHeight * 0.2f
-    ));
-    renderer.drawText(title);
-    
-    renderButtons(renderer);
+    // Render main border (contains all buttons)
+    mainBorder.render(renderer);
 }
 
 MenuAction PauseMenu::handleEvent(const sf::Event& event) {
     if (!initialized) return MenuAction::None;
+    
+    lastAction = MenuAction::None;
     
     if (event.is<sf::Event::MouseButtonPressed>()) {
         auto mouseButton = event.getIf<sf::Event::MouseButtonPressed>();
         if (mouseButton && mouseButton->button == sf::Mouse::Button::Left) {
             sf::Vector2i sfMousePos = sf::Mouse::getPosition(*window);
             sf::Vector2f clickPos(static_cast<float>(sfMousePos.x), static_cast<float>(sfMousePos.y));
-            
-            for (size_t i = 0; i < buttons.size(); ++i) {
-                if (isMouseOverButton(buttons[i], clickPos)) {
-                    if (buttons[i].label == "Resume") {
-                        return MenuAction::Resume;
-                    } else if (buttons[i].label == "Settings") {
-                        return MenuAction::Settings;
-                    } else if (buttons[i].label == "Quit to Main") {
-                        return MenuAction::QuitToMain;
-                    }
-                    break;
-                }
-            }
+            mainBorder.handleMousePress(clickPos);
+        }
+    } else if (event.is<sf::Event::MouseButtonReleased>()) {
+        auto mouseButton = event.getIf<sf::Event::MouseButtonReleased>();
+        if (mouseButton && mouseButton->button == sf::Mouse::Button::Left) {
+            mainBorder.handleMouseRelease();
+        }
+    } else if (event.is<sf::Event::MouseMoved>()) {
+        auto mouseMove = event.getIf<sf::Event::MouseMoved>();
+        if (mouseMove) {
+            sf::Vector2f pos(static_cast<float>(mouseMove->position.x), static_cast<float>(mouseMove->position.y));
+            mainBorder.handleMouseMove(pos);
         }
     }
     
-    return MenuAction::None;
-}
-
-void PauseMenu::renderButtons(Renderer& renderer) {
-    for (auto& btn : buttons) {
-        if (btn.isHovered) {
-            btn.background.setFillColor(sf::Color(80, 80, 80));
-        } else {
-            btn.background.setFillColor(sf::Color(50, 50, 50));
-        }
-        
-        renderer.drawRectangle(btn.background);
-        if (btn.text) renderer.drawText(*btn.text);
-    }
-}
-
-bool PauseMenu::isMouseOverButton(const Button& btn, const sf::Vector2f& mousePos) {
-    sf::Vector2f pos = btn.background.getPosition();
-    sf::Vector2f size = btn.background.getSize();
-    return mousePos.x >= pos.x && mousePos.x <= pos.x + size.x &&
-           mousePos.y >= pos.y && mousePos.y <= pos.y + size.y;
-}
-
-void PauseMenu::updateButtonHover(const sf::Vector2f& mousePos) {
-    for (auto& btn : buttons) {
-        btn.isHovered = isMouseOverButton(btn, mousePos);
-    }
+    return lastAction;
 }

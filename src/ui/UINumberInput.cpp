@@ -110,6 +110,10 @@ void UINumberInput::handleMousePress(const sf::Vector2f& mousePos) {
     if (displayBox.getGlobalBounds().contains(mousePos)) {
         isFocused = true;
         inputBuffer = std::to_string(static_cast<int>(value));
+        // Visual focus feedback: change display box color
+        displayBox.setFillColor(sf::Color(60, 60, 80));
+        displayBox.setOutlineColor(sf::Color(150, 150, 255));
+        displayBox.setOutlineThickness(2.0f);
         return;
     }
     
@@ -136,6 +140,13 @@ void UINumberInput::handleMouseRelease() {
     isMinusPressed = false;
     isPlusPressed = false;
     updateButtonColors();
+    
+    // Reset display box visual when losing focus
+    if (!isFocused) {
+        displayBox.setFillColor(sf::Color(50, 50, 50));
+        displayBox.setOutlineColor(sf::Color(100, 100, 100));
+        displayBox.setOutlineThickness(1.0f);
+    }
 }
 
 void UINumberInput::handleKeyPress(const sf::Event::KeyPressed& keyEvent) {
@@ -158,6 +169,13 @@ void UINumberInput::handleKeyPress(const sf::Event::KeyPressed& keyEvent) {
         if (!inputBuffer.empty()) {
             inputBuffer.pop_back();
         }
+    } else if (keyEvent.scancode == sf::Keyboard::Scancode::Escape) {
+        // Cancel editing, revert to original value
+        isFocused = false;
+        updateDisplay();
+        displayBox.setFillColor(sf::Color(50, 50, 50));
+        displayBox.setOutlineColor(sf::Color(100, 100, 100));
+        displayBox.setOutlineThickness(1.0f);
     }
 }
 
@@ -165,10 +183,9 @@ void UINumberInput::handleTextEntered(const sf::Event::TextEntered& textEvent) {
     if (!initialized || !isFocused) return;
     
     if (textEvent.unicode < 32 || textEvent.unicode > 126) return;
-    if (textEvent.unicode == '-') return;  // Allow negative sign
     
     char c = static_cast<char>(textEvent.unicode);
-    if (isdigit(c) || c == '.') {
+    if (isdigit(c) || c == '.' || c == '-') {
         inputBuffer += c;
     }
 }
