@@ -23,8 +23,8 @@ public:
     virtual void handleTextEntered(const sf::Event::TextEntered& textEvent) {}
     
     // Position/size accessors
-    sf::Vector2f getPosition() const { return position; }
-    sf::Vector2f getSize() const { return size; }
+    virtual sf::Vector2f getPosition() const { return position; }
+    virtual sf::Vector2f getSize() const { return size; }
     virtual void setPosition(float x, float y);
     virtual void setSize(float width, float height);
     

@@ -3,33 +3,17 @@
 #include "core/Window.h"
 #include "core/Settings.h"
 #include "rendering/Renderer.h"
-#include "UIButton.h"
-#include "UIBorder.h"
-#include "../save/SaveManager.h"
+#include "../UIElements/UIButton.h"
+#include "../UIElements/UIBorder.h"
+#include "MainMenu.h"  // For MenuAction enum
 #include <SFML/Graphics.hpp>
 #include <vector>
 #include <string>
-#include <functional>
 
-enum class MenuAction {
-    None,
-    Play,
-    Resume,
-    Settings,
-    Quit,
-    QuitToMain,
-    ApplySettings,
-    Back,
-    Continue,
-    SaveGame,
-    LoadGame,
-    DeleteSave
-};
-
-class MainMenu {
+class PauseMenu {
 public:
-    MainMenu();
-    ~MainMenu();
+    PauseMenu();
+    ~PauseMenu();
     
     void initialize(sf::RenderWindow& window);
     bool isInitialized() const;
@@ -39,29 +23,26 @@ public:
 
 private:
     void buildMenu();
-    void buildTitle();
     
     sf::Font font;
     sf::RenderWindow* window = nullptr;
     
     // Layout borders
-    UIBorder mainBorder;           // Full-screen (0, 0, 100%, 100%)
+    UIBorder mainBorder;           // Full-screen container
     UIBorder centerButtonBorder;   // Centered button container
     
-    UIButton playButton;
+    // Buttons
+    UIButton resumeButton;
+    UIButton saveButton;
     UIButton loadButton;
     UIButton settingsButton;
-    UIButton quitButton;
-    UIButton* continueButton = nullptr;  // Dynamic, only if save exists
+    UIButton quitToMainBtn;
+    UIButton quitBtn;
     
-    MenuAction lastAction = MenuAction::None;
     bool initialized = false;
-    bool hasRecentSave = false;
+    MenuAction lastAction = MenuAction::None;
     
-    sf::Vector2f mousePos;
     sf::Vector2u lastWindowSize;  // Track window size to detect changes
     float windowWidth = 0.0f;
     float windowHeight = 0.0f;
-    
-    void checkForRecentSave();
 };

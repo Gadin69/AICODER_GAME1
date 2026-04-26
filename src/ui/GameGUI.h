@@ -1,8 +1,8 @@
 #pragma once
 
-#include "UIBorder.h"
-#include "UISlider.h"
-#include "UIElementSelector.h"
+#include "UIElements/UIBorder.h"
+#include "UIElements/UISlider.h"
+#include "UIElements/UIElementSelector.h"
 #include <SFML/Graphics.hpp>
 
 class Renderer;  // Forward declaration

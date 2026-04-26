@@ -1,5 +1,5 @@
 #include "LoadGameMenu.h"
-#include "../rendering/Renderer.h"
+#include "../../rendering/Renderer.h"
 #include <iostream>
 #include <algorithm>
 #include <ctime>
@@ -70,13 +70,16 @@ void LoadGameMenu::buildMenu() {
         // Title border (top 10%)
         titleBorder.initialize(0, 0, windowWidth, windowHeight * 0.10f);
         
-        // Save list border (left 60%, middle area)
+        // Save list border (left 60%, middle area) - NOW UIScrollBorder
         saveListBorder.initialize(
             windowWidth * 0.05f,
             windowHeight * 0.12f,
             windowWidth * 0.55f,
-            windowHeight * 0.73f
+            windowHeight * 0.73f,
+            ScrollbarSide::Right,
+            12.0f
         );
+        saveListBorder.setBackgroundColor(sf::Color(35, 35, 45));
         
         // Details border (right 35%, middle area)
         detailsBorder.initialize(
@@ -141,79 +144,43 @@ void LoadGameMenu::buildMenu() {
 void LoadGameMenu::refreshSaveList() {
     // Clear existing entries
     saveEntries.clear();
+    saveListBorder.clearChildren();  // Clear UIScrollBorder children
     selectedIndex = -1;
     selectedSavePath = "";
     
     std::cout << "[LoadGameMenu] Refreshing save list..." << std::endl;
     
     try {
-        // Get save list from SaveManager
         auto saves = SaveManager::getInstance().getSaveList();
         std::cout << "[LoadGameMenu] Found " << saves.size() << " save(s)" << std::endl;
         
-        if (!window) {
-            std::cerr << "[LoadGameMenu] ERROR: window is null" << std::endl;
-            return;
-        }
-    
-    sf::Vector2u windowSize = window->getSize();
-    float windowWidth = static_cast<float>(windowSize.x);
-    float windowHeight = static_cast<float>(windowSize.y);
-    
-    float entryWidth = windowWidth * 0.55f;
-    float entryHeight = 100.0f;
-    float spacing = 10.0f;
-    float startX = windowWidth * 0.05f;
-    float startY = windowHeight * 0.1f;
-    
-    for (size_t i = 0; i < saves.size(); ++i) {
-        SaveEntry entry;
-        entry.metadata = saves[i];
+        if (!window) return;
         
-        // Background
-        entry.background.setSize(sf::Vector2f(entryWidth, entryHeight));
-        entry.background.setPosition(sf::Vector2f(startX, startY + i * (entryHeight + spacing)));
-        entry.background.setFillColor(sf::Color(40, 40, 40));
-        entry.background.setOutlineColor(sf::Color(80, 80, 80));
-        entry.background.setOutlineThickness(2.0f);
+        // Reserve space to prevent vector reallocation (which would invalidate pointers)
+        saveEntries.reserve(saves.size());
         
-        // Load thumbnail if exists
-        if (!saves[i].thumbnailPath.empty()) {
-            entry.thumbnail = new sf::Texture();
-            if (entry.thumbnail->loadFromFile(saves[i].thumbnailPath)) {
-                // Texture loaded successfully
-            } else {
-                delete entry.thumbnail;
-                entry.thumbnail = nullptr;
-            }
+        float listWidth = windowWidth * 0.55f;
+        float entryHeight = 70.0f;  // Height per save entry
+        float spacing = 10.0f;
+        
+        for (size_t i = 0; i < saves.size(); ++i) {
+            // Create entry directly in vector to avoid move issues
+            saveEntries.emplace_back();
+            auto& entry = saveEntries.back();
+            
+            entry.initialize(font, saves[i], listWidth - 24);
+            // Add top spacing for first entry (same as spacing between entries)
+            entry.setPosition(10, spacing + i * (entryHeight + spacing));
+            entry.setSize(listWidth - 24, entryHeight);  // Set size BEFORE adding to scroll border
+            
+            // Add to scroll border with absolute positioning (no relative coords)
+            saveListBorder.addChild(&entry);
         }
         
-        // Name text
-        entry.nameText = new sf::Text(font, saves[i].saveName, 18);
-        entry.nameText->setFillColor(sf::Color::White);
-        entry.nameText->setPosition(sf::Vector2f(startX + 100, startY + i * (entryHeight + spacing) + 10));
-        
-        // Date text
-        std::string dateStr = formatTimestamp(saves[i].timestamp);
-        entry.dateText = new sf::Text(font, dateStr, 14);
-        entry.dateText->setFillColor(sf::Color(180, 180, 180));
-        entry.dateText->setPosition(sf::Vector2f(startX + 100, startY + i * (entryHeight + spacing) + 40));
-        
-        // Details text
-        std::string details = std::to_string(saves[i].gridWidth) + "x" + 
-                             std::to_string(saves[i].gridHeight) + " | " +
-                             std::to_string(saves[i].cellCount) + " cells";
-        entry.detailsText = new sf::Text(font, details, 14);
-        entry.detailsText->setFillColor(sf::Color(150, 150, 150));
-        entry.detailsText->setPosition(sf::Vector2f(startX + 100, startY + i * (entryHeight + spacing) + 65));
-        
-        saveEntries.push_back(std::move(entry));
-    }
+        std::cout << "[LoadGameMenu] Save list refreshed - Total entries: " << saveEntries.size() << std::endl;
     } catch (const std::exception& e) {
         std::cerr << "[LoadGameMenu] ERROR refreshing save list: " << e.what() << std::endl;
     }
-    
-    std::cout << "[LoadGameMenu] Save list refreshed" << std::endl;
 }
 
 void LoadGameMenu::selectSave(int index) {
@@ -225,17 +192,20 @@ void LoadGameMenu::selectSave(int index) {
     
     // Deselect previous
     if (selectedIndex >= 0 && selectedIndex < static_cast<int>(saveEntries.size())) {
-        saveEntries[selectedIndex].isSelected = false;
+        saveEntries[selectedIndex].setSelected(false);
     }
     
     // Select new
     selectedIndex = index;
-    saveEntries[index].isSelected = true;
-    selectedSavePath = saveEntries[index].metadata.filePath;
+    saveEntries[index].setSelected(true);
+    selectedSavePath = saveEntries[index].getSavePath();
 }
 
-bool LoadGameMenu::isMouseOverEntry(const SaveEntry& entry, const sf::Vector2f& mousePos) const {
-    return entry.background.getGlobalBounds().contains(mousePos);
+bool LoadGameMenu::isMouseOverContainer(const UISaveEntry& entry, const sf::Vector2f& mousePos) const {
+    sf::Vector2f pos = entry.getPosition();
+    sf::Vector2f size = entry.getSize();
+    sf::FloatRect bounds(sf::Vector2f(pos.x, pos.y), sf::Vector2f(size.x, size.y));
+    return bounds.contains(mousePos);
 }
 
 std::string LoadGameMenu::formatTimestamp(time_t timestamp) const {
@@ -270,39 +240,9 @@ void LoadGameMenu::render(Renderer& renderer) {
         buildMenu();
     }
     
-    // Render main border (background + buttons)
+    // std::cout << "[LoadGameMenu] Rendering mainBorder..." << std::endl;
+    // Render main border (handles all children including saveListBorder and UISaveEntry objects)
     mainBorder.render(renderer);
-    
-    // Render custom save list entries (these are not UIElements)
-    for (auto& entry : saveEntries) {
-        // Update selection color
-        if (entry.isSelected) {
-            entry.background.setFillColor(sf::Color(60, 60, 100));
-            entry.background.setOutlineColor(sf::Color(100, 100, 200));
-        } else if (entry.isHovered) {
-            entry.background.setFillColor(sf::Color(50, 50, 50));
-        } else {
-            entry.background.setFillColor(sf::Color(40, 40, 40));
-        }
-        
-        renderer.drawRectangle(entry.background);
-        
-        // Render thumbnail
-        if (entry.thumbnail) {
-            sf::Sprite thumbSprite(*entry.thumbnail);
-            sf::Vector2f pos = entry.background.getPosition();
-            thumbSprite.setPosition(sf::Vector2f(pos.x + 10, pos.y + 10));
-            float scaleX = 80.0f / entry.thumbnail->getSize().x;
-            float scaleY = 80.0f / entry.thumbnail->getSize().y;
-            thumbSprite.setScale(sf::Vector2f(scaleX, scaleY));
-            renderer.drawSprite(thumbSprite);
-        }
-        
-        // Render texts
-        if (entry.nameText) renderer.drawText(*entry.nameText);
-        if (entry.dateText) renderer.drawText(*entry.dateText);
-        if (entry.detailsText) renderer.drawText(*entry.detailsText);
-    }
     
     // Show message if no saves
     if (saveEntries.empty()) {
@@ -321,7 +261,7 @@ void LoadGameMenu::render(Renderer& renderer) {
 void LoadGameMenu::renderDetailsPanel(Renderer& renderer) {
     if (selectedIndex < 0 || selectedIndex >= static_cast<int>(saveEntries.size())) return;
     
-    const auto& meta = saveEntries[selectedIndex].metadata;
+    const auto& meta = saveEntries[selectedIndex].getMetadata();
     
     sf::Vector2u windowSize = window->getSize();
     float windowWidth = static_cast<float>(windowSize.x);
@@ -402,10 +342,28 @@ MenuAction LoadGameMenu::handleEvent(const sf::Event& event) {
             sf::Vector2i sfMousePos = sf::Mouse::getPosition(*window);
             sf::Vector2f clickPos(static_cast<float>(sfMousePos.x), static_cast<float>(sfMousePos.y));
             
-            // Check save entries first (custom UI)
+            // Forward to saveListBorder for scrollbar handling first
+            saveListBorder.handleMousePress(clickPos);
+            
+            // Check save entries (use stored absolute positions + scroll border screen position)
+            sf::Vector2f scrollBorderPos = saveListBorder.getPosition();
+            float scrollOffset = saveListBorder.getScrollOffset();
+            
             for (size_t i = 0; i < saveEntries.size(); ++i) {
-                if (isMouseOverEntry(saveEntries[i], clickPos)) {
-                    selectSave(i);
+                // Use the entry's local position (not screen position)
+                sf::Vector2f entryLocalPos = saveEntries[i].getPosition();
+                sf::Vector2f entrySize = saveEntries[i].getSize();
+                
+                // Convert to screen coordinates: scroll border position + local position - scroll offset
+                sf::Vector2f entryScreenPos(
+                    scrollBorderPos.x + entryLocalPos.x,
+                    scrollBorderPos.y + entryLocalPos.y - scrollOffset
+                );
+                
+                sf::FloatRect bounds(entryScreenPos, entrySize);
+                
+                if (bounds.contains(clickPos)) {
+                    selectSave(static_cast<int>(i));
                     break;
                 }
             }
@@ -416,6 +374,7 @@ MenuAction LoadGameMenu::handleEvent(const sf::Event& event) {
     } else if (event.is<sf::Event::MouseButtonReleased>()) {
         auto mouseButton = event.getIf<sf::Event::MouseButtonReleased>();
         if (mouseButton && mouseButton->button == sf::Mouse::Button::Left) {
+            saveListBorder.handleMouseRelease();
             mainBorder.handleMouseRelease();
         }
     } else if (event.is<sf::Event::MouseMoved>()) {
@@ -423,10 +382,8 @@ MenuAction LoadGameMenu::handleEvent(const sf::Event& event) {
         if (mouseMove) {
             sf::Vector2f pos(static_cast<float>(mouseMove->position.x), static_cast<float>(mouseMove->position.y));
             
-            // Update entry hover states (custom UI)
-            for (auto& entry : saveEntries) {
-                entry.isHovered = isMouseOverEntry(entry, pos);
-            }
+            // Forward to saveListBorder for scrollbar hover
+            saveListBorder.handleMouseMove(pos);
             
             // Route to border (handles button hover)
             mainBorder.handleMouseMove(pos);

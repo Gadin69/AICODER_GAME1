@@ -1,5 +1,5 @@
 #include "UIBorder.h"
-#include "../rendering/Renderer.h"
+#include "../../rendering/Renderer.h"
 
 UIBorder::UIBorder() {}
 
@@ -29,6 +29,14 @@ void UIBorder::setBackgroundColor(const sf::Color& color) {
     border.setFillColor(color);
 }
 
+void UIBorder::setBorderColor(const sf::Color& color) {
+    border.setOutlineColor(color);
+}
+
+void UIBorder::setBorderThickness(float thickness) {
+    border.setOutlineThickness(thickness);
+}
+
 // NEW: Add polymorphic UIElement child
 void UIBorder::addChild(UIElement* child, float relX, float relY, float relWidth, float relHeight) {
     if (!child) return;
@@ -39,6 +47,24 @@ void UIBorder::addChild(UIElement* child, float relX, float relY, float relWidth
     elemChild.relY = relY;
     elemChild.relWidth = relWidth;
     elemChild.relHeight = relHeight;
+    elemChild.useAbsolutePosition = false;
+    
+    uiElementChildren.push_back(elemChild);
+}
+
+// Add UIElement child with absolute positioning (child manages its own position)
+void UIBorder::addChild(UIElement* child) {
+    if (!child) return;
+    
+    UIElementChild elemChild;
+    elemChild.element = child;
+    elemChild.relX = 0.0f;
+    elemChild.relY = 0.0f;
+    elemChild.relWidth = 1.0f;
+    elemChild.relHeight = 1.0f;
+    elemChild.useAbsolutePosition = true;
+    elemChild.absolutePos = child->getPosition();  // Store current position
+    elemChild.absoluteSize = child->getSize();     // Store current size
     
     uiElementChildren.push_back(elemChild);
 }
@@ -153,6 +179,9 @@ void UIBorder::updateChildPositions() {
     
     // Update UIElement children positions and sizes
     for (auto& child : uiElementChildren) {
+        // Skip children that use absolute positioning
+        if (child.useAbsolutePosition) continue;
+        
         float absX = borderX + (child.relX * borderWidth);
         float absY = borderY + (child.relY * borderHeight);
         float absWidth = child.relWidth * borderWidth;

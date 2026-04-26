@@ -4,8 +4,8 @@
 #include "UISlider.h"
 #include "UINumberInput.h"
 #include "UIButton.h"
-#include "../simulation/Cell.h"
-#include "../simulation/ElementTypes.h"
+#include "../../simulation/Cell.h"
+#include "../../simulation/ElementTypes.h"
 #include <SFML/Graphics.hpp>
 #include <vector>
 

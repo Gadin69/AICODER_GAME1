@@ -15,9 +15,15 @@ public:
     void setSize(float width, float height);  // Resizes and scales children
     void setPosition(float x, float y);
     void setBackgroundColor(const sf::Color& color);  // Set border background color
+    void setBorderColor(const sf::Color& color);      // Set border outline color
+    void setBorderThickness(float thickness);         // Set border outline thickness
     
     // NEW: Add polymorphic UIElement child (preferred method)
+    // Add UIElement child with relative positioning
     void addChild(UIElement* child, float relX, float relY, float relWidth, float relHeight);
+    
+    // Add UIElement child with absolute positioning (no automatic position updates)
+    void addChild(UIElement* child);
     
     // OLD: Add SFML primitive child (backward compatibility)
     void addChild(sf::RectangleShape* child, float relX, float relY, float relWidth, float relHeight);
@@ -37,24 +43,32 @@ public:
     // Mouse through mode - if true, border doesn't block mouse events (for overlays)
     bool mouseThrough = false;
     
-    // Getters for mouse collision detection
-    sf::Vector2f getPosition() const;
-    sf::Vector2f getSize() const;
+    // Getters for mouse collision detection (override to use border's values)
+    sf::Vector2f getPosition() const override;
+    sf::Vector2f getSize() const override;
     bool containsPoint(const sf::Vector2f& point) const;  // Hit testing
     void clearChildren();  // Remove all children (for dynamic content switching)
     size_t getChildCount() const { return uiElementChildren.size(); }  // Debug: count children
     
+    // Protected members for derived classes (e.g., UIScrollBorder)
+protected:
     bool initialized = false;
+    
+    struct UIElementChild {
+        UIElement* element;
+        float relX, relY, relWidth, relHeight;  // Percentages
+        bool useAbsolutePosition = false;  // If true, don't update position in updateChildPositions()
+        sf::Vector2f absolutePos = {0, 0};  // Stored absolute position for absolute children
+        sf::Vector2f absoluteSize = {0, 0};  // Stored absolute size for absolute children
+    };
+    std::vector<UIElementChild> uiElementChildren;
     
 private:
     sf::RectangleShape border;
     
-    // Polymorphic UIElement children
-    struct UIElementChild {
-        UIElement* element;
-        float relX, relY, relWidth, relHeight;  // Percentages
-    };
-    std::vector<UIElementChild> uiElementChildren;
+protected:
+    sf::RectangleShape& getBorder() { return border; }
+    const sf::RectangleShape& getBorder() const { return border; }
     
     // SFML primitive children (backward compatibility)
     struct PrimitiveChild {
@@ -72,5 +86,5 @@ private:
     std::vector<sf::RectangleShape*> popupRectangles;  // Rendered on top (highest z-order)
     std::vector<sf::Text*> popupTexts;  // Rendered on top (highest z-order)
     
-    void updateChildPositions();  // Recalculates absolute positions from percentages
+    virtual void updateChildPositions();  // Recalculates absolute positions from percentages (virtual for UIScrollBorder)
 };

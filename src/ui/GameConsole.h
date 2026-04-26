@@ -1,7 +1,7 @@
 #pragma once
 
-#include "UIElement.h"
-#include "UITextInput.h"
+#include "UIElements/UIElement.h"
+#include "UIElements/UITextInput.h"
 #include <SFML/Graphics.hpp>
 #include <string>
 #include <vector>

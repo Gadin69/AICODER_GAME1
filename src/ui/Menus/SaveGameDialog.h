@@ -1,8 +1,8 @@
 #pragma once
 
-#include "UITextInput.h"
-#include "UIButton.h"
-#include "UIBorder.h"
+#include "../UIElements/UITextInput.h"
+#include "../UIElements/UIButton.h"
+#include "../UIElements/UIBorder.h"
 #include "MainMenu.h"
 #include <SFML/Graphics.hpp>
 #include <string>

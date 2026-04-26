@@ -1,6 +1,6 @@
 #include "SaveGameDialog.h"
-#include "../save/SaveManager.h"
-#include "../rendering/Renderer.h"
+#include "../../save/SaveManager.h"
+#include "../../rendering/Renderer.h"
 #include <iostream>
 
 SaveGameDialog::SaveGameDialog() {

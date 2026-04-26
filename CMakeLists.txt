@@ -37,27 +37,29 @@ set(SOURCES
     src/systems/BuildingSystem.cpp
     src/systems/ResourceSystem.cpp
     src/systems/CraftingSystem.cpp
-    src/ui/MainMenu.cpp
-    src/ui/SettingsMenu.cpp
-    src/ui/PauseMenu.cpp
-    src/ui/UISlider.cpp
-    src/ui/UIButton.cpp
-    src/ui/UICheckbox.cpp
-    src/ui/UIProgressBar.cpp
-    src/ui/UIToggle.cpp
-    src/ui/UITextInput.cpp
-    src/ui/UIDropdown.cpp
-    src/ui/UIRadioButton.cpp
-    src/ui/UITooltip.cpp
-    src/ui/UINumberInput.cpp
+    src/ui/Menus/MainMenu.cpp
+    src/ui/Menus/SettingsMenu.cpp
+    src/ui/Menus/PauseMenu.cpp
+    src/ui/UIElements/UISlider.cpp
+    src/ui/UIElements/UIButton.cpp
+    src/ui/UIElements/UICheckbox.cpp
+    src/ui/UIElements/UIProgressBar.cpp
+    src/ui/UIElements/UIToggle.cpp
+    src/ui/UIElements/UITextInput.cpp
+    src/ui/UIElements/UIDropdown.cpp
+    src/ui/UIElements/UIRadioButton.cpp
+    src/ui/UIElements/UITooltip.cpp
+    src/ui/UIElements/UINumberInput.cpp
     src/ui/GameConsole.cpp
-    src/ui/UIBorder.cpp
-    src/ui/UIElement.cpp
-    src/ui/UIElementSelector.cpp
+    src/ui/UIElements/UIBorder.cpp
+    src/ui/UIElements/UIElement.cpp
+    src/ui/UIElements/UIElementSelector.cpp
     src/ui/GameGUI.cpp
     src/save/SaveManager.cpp
-    src/ui/LoadGameMenu.cpp
-    src/ui/SaveGameDialog.cpp
+    src/ui/Menus/LoadGameMenu.cpp
+    src/ui/Menus/SaveGameDialog.cpp
+    src/ui/UIElements/UIScrollBorder.cpp
+    src/ui/UIElements/UISaveEntry.cpp
 )
 
 # Header files
@@ -94,27 +96,29 @@ set(HEADERS
     src/systems/BuildingSystem.h
     src/systems/ResourceSystem.h
     src/systems/CraftingSystem.h
-    src/ui/MainMenu.h
-    src/ui/SettingsMenu.h
-    src/ui/PauseMenu.h
-    src/ui/UISlider.h
-    src/ui/UIButton.h
-    src/ui/UICheckbox.h
-    src/ui/UIProgressBar.h
-    src/ui/UIToggle.h
-    src/ui/UITextInput.h
-    src/ui/UIDropdown.h
-    src/ui/UIRadioButton.h
-    src/ui/UITooltip.h
-    src/ui/UINumberInput.h
+    src/ui/Menus/MainMenu.h
+    src/ui/Menus/SettingsMenu.h
+    src/ui/Menus/PauseMenu.h
+    src/ui/UIElements/UISlider.h
+    src/ui/UIElements/UIButton.h
+    src/ui/UIElements/UICheckbox.h
+    src/ui/UIElements/UIProgressBar.h
+    src/ui/UIElements/UIToggle.h
+    src/ui/UIElements/UITextInput.h
+    src/ui/UIElements/UIDropdown.h
+    src/ui/UIElements/UIRadioButton.h
+    src/ui/UIElements/UITooltip.h
+    src/ui/UIElements/UINumberInput.h
     src/ui/GameConsole.h
-    src/ui/UIBorder.h
-    src/ui/UIElement.h
-    src/ui/UIElementSelector.h
+    src/ui/UIElements/UIBorder.h
+    src/ui/UIElements/UIElement.h
+    src/ui/UIElements/UIElementSelector.h
     src/ui/GameGUI.h
     src/save/SaveManager.h
-    src/ui/LoadGameMenu.h
-    src/ui/SaveGameDialog.h
+    src/ui/Menus/LoadGameMenu.h
+    src/ui/Menus/SaveGameDialog.h
+    src/ui/UIElements/UIScrollBorder.h
+    src/ui/UIElements/UISaveEntry.h
 )
 
 # Create executable

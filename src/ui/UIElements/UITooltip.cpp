@@ -1,5 +1,5 @@
 #include "UITooltip.h"
-#include "rendering/Renderer.h"
+#include "../../rendering/Renderer.h"
 #include <algorithm>
 
 UITooltip::UITooltip() {

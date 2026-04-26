@@ -3,13 +3,13 @@
 #include "core/Window.h"
 #include "core/Settings.h"
 #include "rendering/Renderer.h"
-#include "UISlider.h"
-#include "UIButton.h"
-#include "UICheckbox.h"
-#include "UIToggle.h"
-#include "UIDropdown.h"
-#include "UINumberInput.h"
-#include "UIBorder.h"
+#include "../UIElements/UISlider.h"
+#include "../UIElements/UIButton.h"
+#include "../UIElements/UICheckbox.h"
+#include "../UIElements/UIToggle.h"
+#include "../UIElements/UIDropdown.h"
+#include "../UIElements/UINumberInput.h"
+#include "../UIElements/UIBorder.h"
 #include "MainMenu.h"  // For MenuAction enum
 #include <SFML/Graphics.hpp>
 #include <vector>
