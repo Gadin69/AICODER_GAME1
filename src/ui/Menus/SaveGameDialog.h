@@ -25,6 +25,10 @@ public:
     std::string getSaveName() const;
     std::string getNotes() const;
     
+    // Thumbnail capture
+    void setPendingThumbnailPath(const std::string& path) { pendingThumbnailPath = path; }
+    std::string getPendingThumbnailPath() const { return pendingThumbnailPath; }
+    
 private:
     sf::Font font;
     sf::RenderWindow* window = nullptr;
@@ -45,4 +49,6 @@ private:
     sf::Vector2u lastWindowSize;
     float windowWidth = 0.0f;
     float windowHeight = 0.0f;
+    
+    std::string pendingThumbnailPath;  // Path to pre-captured thumbnail
 };

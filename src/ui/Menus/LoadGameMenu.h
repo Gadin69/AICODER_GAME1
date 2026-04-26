@@ -4,6 +4,7 @@
 #include "../UIElements/UIBorder.h"
 #include "../UIElements/UIScrollBorder.h"
 #include "../UIElements/UISaveEntry.h"
+#include "../UIElements/UIThumbnailViewer.h"
 #include "MainMenu.h"
 #include "../../save/SaveManager.h"
 #include <SFML/Graphics.hpp>
@@ -36,10 +37,12 @@ private:
     UIBorder titleBorder;          // Top title area
     UIScrollBorder saveListBorder; // Left save list (scrollable)
     UIBorder detailsBorder;        // Right details panel
+    UIBorder detailsInfoBorder;    // Info text area within details
     UIBorder buttonBorder;         // Bottom buttons
     
     std::vector<UISaveEntry> saveEntries;
     int selectedIndex = -1;
+    int lastSelectedIndex = -1;  // Track previous selection to avoid reloading thumbnail
     std::string selectedSavePath;
     bool initialized = false;
     bool fontLoaded = false;
@@ -47,6 +50,8 @@ private:
     UIButton loadButton;
     UIButton deleteButton;
     UIButton backButton;
+    
+    UIThumbnailViewer thumbnailViewer;  // Thumbnail display
     
     MenuAction lastAction = MenuAction::None;
     bool cameFromMainMenu = false;

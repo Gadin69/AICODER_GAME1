@@ -4,6 +4,7 @@
 #include <vector>
 #include <cstdint>
 #include <ctime>
+#include <SFML/Graphics.hpp>
 
 struct SaveMetadata {
     std::string filePath;
@@ -36,6 +37,9 @@ public:
     
     // Screenshot capture
     bool captureThumbnail(const std::string& outputPath, int width = 160, int height = 90);
+    bool captureThumbnailFromWindow(const std::string& outputPath, 
+                                    sf::RenderWindow& window,
+                                    int width = 160, int height = 90);
     std::string generateSaveName() const;
     
 private:

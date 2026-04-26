@@ -61,6 +61,7 @@ void LoadGameMenu::buildMenu() {
         titleBorder.clearChildren();
         saveListBorder.clearChildren();
         detailsBorder.clearChildren();
+        detailsInfoBorder.clearChildren();
         buttonBorder.clearChildren();
         
         // Main border (full screen) - OPAQUE background to hide game UI
@@ -87,6 +88,27 @@ void LoadGameMenu::buildMenu() {
             windowHeight * 0.12f,
             windowWidth * 0.33f,
             windowHeight * 0.73f
+        );
+        detailsBorder.setBackgroundColor(sf::Color(25, 25, 25));
+        detailsBorder.setBorderColor(sf::Color(80, 80, 80));
+        detailsBorder.setBorderThickness(2.0f);
+        
+        // Details info border (top portion of details - for text)
+        detailsInfoBorder.initialize(
+            windowWidth * 0.62f,
+            windowHeight * 0.12f,
+            windowWidth * 0.33f,
+            windowHeight * 0.30f  // 30% of details area for info
+        );
+        
+        // Thumbnail viewer (bottom portion of details - fills remaining space)
+        float thumbnailY = windowHeight * 0.12f + windowHeight * 0.73f * 0.30f;
+        float thumbnailHeight = windowHeight * 0.73f * 0.70f;  // Remaining 70%
+        thumbnailViewer.initialize(
+            windowWidth * 0.62f,
+            thumbnailY,
+            windowWidth * 0.33f,
+            thumbnailHeight
         );
         
         // Button border (bottom 12%)
@@ -197,6 +219,7 @@ void LoadGameMenu::selectSave(int index) {
     
     // Select new
     selectedIndex = index;
+    lastSelectedIndex = -1;  // Force thumbnail reload on next render
     saveEntries[index].setSelected(true);
     selectedSavePath = saveEntries[index].getSavePath();
 }
@@ -263,26 +286,15 @@ void LoadGameMenu::renderDetailsPanel(Renderer& renderer) {
     
     const auto& meta = saveEntries[selectedIndex].getMetadata();
     
-    sf::Vector2u windowSize = window->getSize();
-    float windowWidth = static_cast<float>(windowSize.x);
-    float windowHeight = static_cast<float>(windowSize.y);
+    // Render details info border background
+    detailsInfoBorder.render(renderer);
     
-    // Panel background
-    float panelWidth = windowWidth * 0.35f;
-    float panelHeight = windowHeight * 0.6f;
-    float panelX = windowWidth * 0.6f;
-    float panelY = windowHeight * 0.1f;
+    // Render info text within the detailsInfoBorder
+    sf::Vector2f infoPos = detailsInfoBorder.getPosition();
+    sf::Vector2f infoSize = detailsInfoBorder.getSize();
     
-    sf::RectangleShape panel(sf::Vector2f(panelWidth, panelHeight));
-    panel.setPosition(sf::Vector2f(panelX, panelY));
-    panel.setFillColor(sf::Color(25, 25, 25));
-    panel.setOutlineColor(sf::Color(80, 80, 80));
-    panel.setOutlineThickness(2.0f);
-    renderer.drawRectangle(panel);
-    
-    // Details text
-    float x = panelX + 20;
-    float y = panelY + 20;
+    float x = infoPos.x + 15;
+    float y = infoPos.y + 15;
     
     auto drawDetail = [&](const std::string& label, const std::string& value) {
         sf::Text labelText(font, label + ":", 16);
@@ -292,10 +304,10 @@ void LoadGameMenu::renderDetailsPanel(Renderer& renderer) {
         
         sf::Text valueText(font, value, 16);
         valueText.setFillColor(sf::Color::White);
-        valueText.setPosition(sf::Vector2f(x + 120, y));
+        valueText.setPosition(sf::Vector2f(x + 100, y));
         renderer.drawText(valueText);
         
-        y += 30;
+        y += 28;
     };
     
     drawDetail("Name", meta.saveName);
@@ -303,14 +315,15 @@ void LoadGameMenu::renderDetailsPanel(Renderer& renderer) {
     drawDetail("Grid Size", std::to_string(meta.gridWidth) + "x" + std::to_string(meta.gridHeight));
     drawDetail("Cells", std::to_string(meta.cellCount));
     
+    // Render notes if present
     if (!meta.notes.empty()) {
-        y += 10;
+        y += 8;
         sf::Text notesLabel(font, "Notes:", 16);
         notesLabel.setFillColor(sf::Color(150, 150, 150));
         notesLabel.setPosition(sf::Vector2f(x, y));
         renderer.drawText(notesLabel);
         
-        y += 25;
+        y += 22;
         // Word wrap notes
         std::string notes = meta.notes;
         std::string line;
@@ -320,9 +333,31 @@ void LoadGameMenu::renderDetailsPanel(Renderer& renderer) {
             notesText.setFillColor(sf::Color(200, 200, 200));
             notesText.setPosition(sf::Vector2f(x + 10, y));
             renderer.drawText(notesText);
-            y += 22;
+            y += 20;
+            
+            // Stop if we're running out of space in info area
+            if (y > infoPos.y + infoSize.y - 20) break;
         }
     }
+    
+    // Load and render thumbnail (only when selection changes)
+    if (selectedIndex != lastSelectedIndex) {
+        thumbnailViewer.loadThumbnail(meta.thumbnailPath);
+        lastSelectedIndex = selectedIndex;
+        std::cout << "[LoadGameMenu] Thumbnail loaded for: " << meta.saveName 
+                  << " Path: " << meta.thumbnailPath 
+                  << " HasThumbnail: " << thumbnailViewer.hasThumbnail() << std::endl;
+    }
+    
+    std::cout << "[LoadGameMenu] Calling thumbnailViewer.render()" << std::endl;
+    std::cout << "[LoadGameMenu] Thumbnail position: (" 
+              << thumbnailViewer.getPosition().x << ", " 
+              << thumbnailViewer.getPosition().y << ")" << std::endl;
+    std::cout << "[LoadGameMenu] Thumbnail size: " 
+              << thumbnailViewer.getSize().x << "x" 
+              << thumbnailViewer.getSize().y << std::endl;
+    
+    thumbnailViewer.render(renderer);
 }
 
 MenuAction LoadGameMenu::handleEvent(const sf::Event& event) {

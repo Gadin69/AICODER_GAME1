@@ -1,4 +1,5 @@
 #include "SaveManager.h"
+#include "../simulation/Grid.h"  // For SaveFileHeader
 #include <fstream>
 #include <filesystem>
 #include <iostream>
@@ -7,19 +8,6 @@
 #include <ctime>
 
 namespace fs = std::filesystem;
-
-// Save file header structure
-struct SaveFileHeader {
-    char magic[8];           // "ONISAVE\0"
-    uint32_t version;         // 1
-    uint32_t gridWidth;
-    uint32_t gridHeight;
-    uint64_t timestamp;       // Unix timestamp
-    uint32_t playTimeSeconds;
-    uint32_t cellCount;       // Non-vacuum cells
-    char saveName[64];        // User-provided or auto-generated
-    char notes[256];          // Optional notes
-};
 
 // Singleton instance
 SaveManager& SaveManager::getInstance() {
@@ -180,6 +168,12 @@ std::vector<SaveMetadata> SaveManager::getSaveList() const {
                         if (!headerName.empty() && headerName != stem) {
                             meta.saveName = headerName;
                         }
+                        
+                        // Use header thumbnail path if available
+                        std::string headerThumbPath(header.thumbnailPath);
+                        if (!headerThumbPath.empty() && fs::exists(headerThumbPath)) {
+                            meta.thumbnailPath = headerThumbPath;
+                        }
                     }
                     
                     file.close();
@@ -243,5 +237,60 @@ bool SaveManager::captureThumbnail(const std::string& outputPath, int width, int
     // Placeholder: Thumbnail capture requires access to render window
     // This would be implemented with SFML's texture capture in a real implementation
     // For now, we skip thumbnails to avoid crashes
+    std::cout << "[SaveManager] WARNING: Thumbnail capture not implemented yet" << std::endl;
     return false;
+}
+
+bool SaveManager::captureThumbnailFromWindow(const std::string& outputPath, 
+                                              sf::RenderWindow& window,
+                                              int width, int height) {
+    try {
+        std::cout << "[SaveManager] Capturing thumbnail..." << std::endl;
+        std::cout << "[SaveManager] Window size: " << window.getSize().x << "x" << window.getSize().y << std::endl;
+        
+        // SFML 3: Texture must be created with size in constructor
+        sf::Texture windowTexture(window.getSize());
+        
+        // Copy the current frame from the window
+        // NOTE: This captures the back buffer, which may not have the latest frame yet
+        windowTexture.update(window);
+        
+        std::cout << "[SaveManager] Window texture created: " 
+                  << windowTexture.getSize().x << "x" << windowTexture.getSize().y << std::endl;
+        
+        // Create render texture for thumbnail
+        sf::RenderTexture renderTexture(sf::Vector2u(width, height));
+        renderTexture.clear(sf::Color::Black);
+        
+        // Create sprite with window texture
+        sf::Sprite windowSprite(windowTexture);
+        
+        // Scale to fit thumbnail size
+        float scaleX = static_cast<float>(width) / window.getSize().x;
+        float scaleY = static_cast<float>(height) / window.getSize().y;
+        float scale = std::min(scaleX, scaleY);
+        
+        windowSprite.setScale(sf::Vector2f(scale, scale));
+        
+        // Center in thumbnail
+        sf::FloatRect bounds = windowSprite.getLocalBounds();
+        float centerX = (width - bounds.size.x * scale) / 2.0f;
+        float centerY = (height - bounds.size.y * scale) / 2.0f;
+        windowSprite.setPosition(sf::Vector2f(centerX, centerY));
+        
+        renderTexture.draw(windowSprite);
+        renderTexture.display();
+        
+        // Save to file
+        sf::Image image = renderTexture.getTexture().copyToImage();
+        bool success = image.saveToFile(outputPath);
+        
+        std::cout << "[SaveManager] Thumbnail capture " << (success ? "SUCCESS" : "FAILED") 
+                  << " - " << outputPath << std::endl;
+        
+        return success;
+    } catch (const std::exception& e) {
+        std::cerr << "[SaveManager] ERROR capturing thumbnail: " << e.what() << std::endl;
+        return false;
+    }
 }

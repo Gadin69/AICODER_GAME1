@@ -98,20 +98,9 @@ const Grid& Grid::getReadBuffer() const {
     return *this;
 }
 
-// Save file header structure (must match SaveManager.cpp)
-struct SaveFileHeader {
-    char magic[8];           // "ONISAVE\0"
-    uint32_t version;         // 1
-    uint32_t gridWidth;
-    uint32_t gridHeight;
-    uint64_t timestamp;       // Unix timestamp
-    uint32_t playTimeSeconds;
-    uint32_t cellCount;       // Non-vacuum cells
-    char saveName[64];        // User-provided or auto-generated
-    char notes[256];          // Optional notes
-};
+// Save file header structure - now defined in Grid.h
 
-bool Grid::saveToFile(const std::string& filePath) const {
+bool Grid::saveToFile(const std::string& filePath, const std::string& notes, const std::string& thumbnailPath) const {
     if (width == 0 || height == 0) {
         std::cerr << "[Grid] ERROR: Cannot save uninitialized grid" << std::endl;
         return false;
@@ -149,6 +138,16 @@ bool Grid::saveToFile(const std::string& filePath) const {
         stem = stem.substr(0, dotPos);
     }
     std::strncpy(header.saveName, stem.c_str(), sizeof(header.saveName) - 1);
+    
+    // Save notes if provided
+    if (!notes.empty()) {
+        std::strncpy(header.notes, notes.c_str(), sizeof(header.notes) - 1);
+    }
+    
+    // Save thumbnail path if provided
+    if (!thumbnailPath.empty()) {
+        std::strncpy(header.thumbnailPath, thumbnailPath.c_str(), sizeof(header.thumbnailPath) - 1);
+    }
     
     // Open file for writing
     std::ofstream file(filePath, std::ios::binary);

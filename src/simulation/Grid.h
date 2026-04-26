@@ -4,6 +4,21 @@
 #include <vector>
 #include <mutex>
 #include <string>
+#include <cstdint>
+
+// Save file format header
+struct SaveFileHeader {
+    char magic[8];           // "ONISAVE\0"
+    uint32_t version;         // 1
+    uint32_t gridWidth;
+    uint32_t gridHeight;
+    uint64_t timestamp;       // Unix timestamp
+    uint32_t playTimeSeconds;
+    uint32_t cellCount;       // Non-vacuum cells
+    char saveName[64];        // User-provided or auto-generated
+    char notes[256];          // Optional notes
+    char thumbnailPath[128];  // Relative path to thumbnail image
+};
 
 class Grid {
 public:
@@ -39,7 +54,9 @@ public:
     void unlock() { gridMutex.unlock(); }
     
     // Save/Load functionality
-    bool saveToFile(const std::string& filePath) const;
+    bool saveToFile(const std::string& filePath, 
+                    const std::string& notes = "", 
+                    const std::string& thumbnailPath = "") const;
     bool loadFromFile(const std::string& filePath);
 
 private:

@@ -933,9 +933,21 @@ int main() {
                         std::string saveName = saveGameDialog.getSaveName();
                         std::string notes = saveGameDialog.getNotes();
                         
-                        // Save the grid
+                        // Use the pre-captured thumbnail
+                        std::string thumbnailPath = saveGameDialog.getPendingThumbnailPath();
+                        
+                        // Rename temp thumbnail to final name
+                        std::string finalThumbnailPath = SaveManager::getInstance().getSaveDirectory() + "/" + saveName + "_thumb.png";
+                        if (!thumbnailPath.empty() && std::filesystem::exists(thumbnailPath)) {
+                            std::filesystem::rename(thumbnailPath, finalThumbnailPath);
+                            thumbnailPath = finalThumbnailPath;
+                        } else {
+                            thumbnailPath = "";  // No thumbnail captured
+                        }
+                        
+                        // Save the grid with notes and thumbnail path
                         std::string datPath = SaveManager::getInstance().getSaveDirectory() + "/" + saveName + ".dat";
-                        if (simGrid.saveToFile(datPath)) {
+                        if (simGrid.saveToFile(datPath, notes, thumbnailPath)) {
                             std::cout << "[Save] Game saved successfully: " << saveName << std::endl;
                         }
                         showSaveDialog = false;
@@ -971,6 +983,15 @@ int main() {
                     if (action == MenuAction::Resume) {
                         gameState = GameState::Playing;
                     } else if (action == MenuAction::SaveGame) {
+                        // Capture thumbnail BEFORE showing dialog (while game is still visible)
+                        std::string thumbnailPath = SaveManager::getInstance().getSaveDirectory() + "/temp_thumb.png";
+                        SaveManager::getInstance().captureThumbnailFromWindow(
+                            thumbnailPath,
+                            renderer.getRenderWindow(),
+                            320, 180
+                        );
+                        saveGameDialog.setPendingThumbnailPath(thumbnailPath);
+                        
                         showSaveDialog = true;
                         saveGameDialog.initialize(renderer.getRenderWindow());
                     } else if (action == MenuAction::LoadGame) {

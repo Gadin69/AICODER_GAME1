@@ -61,6 +61,7 @@ set(SOURCES
     src/ui/Menus/SaveGameDialog.cpp
     src/ui/UIElements/UIScrollBorder.cpp
     src/ui/UIElements/UISaveEntry.cpp
+    src/ui/UIElements/UIThumbnailViewer.cpp
 )
 
 # Header files
@@ -121,6 +122,7 @@ set(HEADERS
     src/ui/Menus/SaveGameDialog.h
     src/ui/UIElements/UIScrollBorder.h
     src/ui/UIElements/UISaveEntry.h
+    src/ui/UIElements/UIThumbnailViewer.h
 )
 
 # Create executable
