@@ -16,6 +16,7 @@
 #include "ecs/Entity.h"
 #include "ui/UIElements/UISlider.h"
 #include "save/SaveManager.h"
+#include "session/GameSessionManager.h"
 #include <SFML/Graphics.hpp>
 
 #define DEBUG_MODE true  // Set to true to enable debug console output
@@ -37,6 +38,7 @@ SettingsMenu settingsMenu;
 PauseMenu pauseMenu;
 LoadGameMenu loadGameMenu;
 SaveGameDialog saveGameDialog;
+GameSessionManager sessionManager;
 
 enum class GameState {
     Menu,
@@ -946,8 +948,7 @@ int main() {
                     MenuAction loadAction = loadGameMenu.handleEvent(event);
                     if (loadAction == MenuAction::Play) {  // Load action
                         std::string path = loadGameMenu.getSelectedSavePath();
-                        if (!path.empty() && simGrid.loadFromFile(path)) {
-                            std::cout << "[Load] Game loaded successfully" << std::endl;
+                        if (!path.empty() && sessionManager.loadGame(path, simGrid, simManager, tileMap, renderer.getCamera(), gameGUI)) {
                             showLoadMenu = false;
                             gameState = GameState::Playing;
                             simulationInitialized = true;

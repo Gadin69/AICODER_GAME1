@@ -56,6 +56,7 @@ set(SOURCES
     src/ui/UIElements/UIElementSelector.cpp
     src/ui/GameGUI.cpp
     src/save/SaveManager.cpp
+    src/session/GameSessionManager.cpp
     src/ui/Menus/LoadGameMenu.cpp
     src/ui/Menus/SaveGameDialog.cpp
     src/ui/UIElements/UIScrollBorder.cpp
@@ -115,6 +116,7 @@ set(HEADERS
     src/ui/UIElements/UIElementSelector.h
     src/ui/GameGUI.h
     src/save/SaveManager.h
+    src/session/GameSessionManager.h
     src/ui/Menus/LoadGameMenu.h
     src/ui/Menus/SaveGameDialog.h
     src/ui/UIElements/UIScrollBorder.h
