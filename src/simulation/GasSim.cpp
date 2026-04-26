@@ -26,6 +26,11 @@ float GasSim::getMaxMassForElement(ElementType type) {
     return 0.0f;  // Solids don't have mass limits
 }
 
+bool GasSim::isGasTypeStatic(ElementType type) {
+    const Element& props = ElementTypes::getElement(type);
+    return props.isGas;
+}
+
 GasSim::GasSim() 
     : SimulationSystem("GasSim", 0.04f) {  // Update every 40ms (faster spreading for visible movement)
     // Initialize gas types dynamically
@@ -112,7 +117,7 @@ bool GasSim::update(float deltaTime) {
         ElementType type = ElementType::Vacuum;
         float mass = 0.0f;
         float pressure = 0.0f;
-        float temperature = -273.15f;
+        float temperature = 20.0f;
     };
     
     std::vector<std::vector<GasCellData>> gasSnapshot(height, std::vector<GasCellData>(width));
@@ -515,6 +520,95 @@ bool GasSim::update(float deltaTime) {
                 
                 float cellMass = cell.mass;
                 
+                bool actedThisTick = false;  // Track if cell acted this tick
+                
+                // PRIORITY 0: OVER-MASS EXPANSION (immediate, explosive pressure release)
+                float maxMass = getMaxMassForElement(cell.elementType);
+                
+                if (cellMass > maxMass) {
+                    float excessMass = cellMass - maxMass;
+                    
+                    // Check neighbors in order: DOWN, LEFT, RIGHT, UP (gravity affects gas expansion)
+                    int neighborDirs[4][2] = {{0, 1}, {-1, 0}, {1, 0}, {0, -1}};
+                    
+                    for (auto& dir : neighborDirs) {
+                        int nx = x + dir[0];
+                        int ny = y + dir[1];
+                        
+                        if (!grid->isValidPosition(nx, ny)) continue;
+                        if (excessMass <= 0.0f) break;  // No more excess to transfer
+                        
+                        Cell& neighbor = grid->getCell(nx, ny);
+                        ElementType neighborType = neighbor.elementType;
+                        
+                        // Skip solids
+                        const Element& neighborProps = ElementTypes::getElement(neighborType);
+                        if (!neighborProps.isGas && neighborType != ElementType::Vacuum) {
+                            continue;  // Skip liquids and solids
+                        }
+                        
+                        bool acted = false;
+                        
+                        // CASE 1: Vacuum - direct mass transfer
+                        if (neighborType == ElementType::Vacuum) {
+                            if (!isMergeSource[y][x] && !isMergeTarget[y][x] &&
+                                !isMergeSource[ny][nx] && !isMergeTarget[ny][nx]) {
+                                
+                                // Convert vacuum to gas with excess mass
+                                neighbor.elementType = cell.elementType;
+                                neighbor.temperature = cell.temperature;
+                                
+                                FlowAction action;
+                                action.fromX = x; action.fromY = y;
+                                action.toX = nx; action.toY = ny;
+                                action.massToMove = excessMass;
+                                action.temperature = cell.temperature;
+                                action.type = cell.elementType;
+                                action.isMerge = true;
+                                flowActions.push_back(action);
+                                
+                                isMergeSource[y][x] = true;
+                                isMergeTarget[ny][nx] = true;
+                                acted = true;
+                            }
+                        }
+                        // CASE 2: Same gas type - equalize (transfer until target full or source at max)
+                        else if (neighborType == cell.elementType && isGasType(neighborType)) {
+                            if (!isMergeSource[y][x] && !isMergeTarget[y][x] &&
+                                !isMergeSource[ny][nx] && !isMergeTarget[ny][nx]) {
+                                
+                                float targetMaxMass = getMaxMassForElement(neighborType);
+                                float spaceInTarget = targetMaxMass - neighbor.mass;
+                                
+                                // Transfer min(excessMass, spaceInTarget)
+                                float massToTransfer = std::min(excessMass, spaceInTarget);
+                                
+                                if (massToTransfer > 0.0f) {
+                                    FlowAction action;
+                                    action.fromX = x; action.fromY = y;
+                                    action.toX = nx; action.toY = ny;
+                                    action.massToMove = massToTransfer;
+                                    action.temperature = cell.temperature;
+                                    action.type = cell.elementType;
+                                    action.isMerge = true;
+                                    flowActions.push_back(action);
+                                    
+                                    isMergeSource[y][x] = true;
+                                    isMergeTarget[ny][nx] = true;
+                                    acted = true;
+                                }
+                            }
+                        }
+                        // CASE 3: Different gas type - skip (don't mix gases)
+                        // CASE 4: Liquid - skip (can't push into liquid)
+                        
+                        if (acted) {
+                            actedThisTick = true;
+                            break;  // Stop at first valid neighbor
+                        }
+                    }
+                }
+                
                 // No minimum mass threshold - let cells fix themselves through natural simulation
                 
                 // Define upward directions: UP, UP-LEFT, UP-RIGHT
@@ -522,12 +616,9 @@ bool GasSim::update(float deltaTime) {
                 int upDirCount = 3;
                 
                 // ============ STEP 1: MOVE upward - SWAP into vacuum ============
-                // CRITICAL: Over-mass cells should NOT move upward - they need to expand downward
+                // CRITICAL: Over-mass cells should NOT merge upward into same-type gas
+                // But they CAN still swap with heavier different-type gases (buoyancy)
                 bool movedUpward = false;
-                
-                // Only allow upward movement for non-over-mass cells
-                float maxMass = getMaxMassForElement(cell.elementType);
-                if (cellMass <= maxMass) {
                 
                 // Small chance to try sideways movement instead of upward (natural spreading)
                 static unsigned int lateralMoveSeed = 77777;
@@ -640,7 +731,6 @@ bool GasSim::update(float deltaTime) {
                         }
                     }
                 }  // End if (!movedUpward)
-                }  // End if cellMass <= maxMass (STEP 1)
                 
                 if (movedUpward) continue;
                 
@@ -989,13 +1079,7 @@ bool GasSim::update(float deltaTime) {
                               << " leftover=" << leftover);
                     
                     // Cell is EMPTY - convert to vacuum with proper cleared data
-                    fromCell.elementType = ElementType::Vacuum;
-                    fromCell.mass = 0.0f;
-                    fromCell.temperature = -273.15f;  // Absolute zero
-                    fromCell.pressure = 0.0f;
-                    fromCell.velocityX = 0.0f;
-                    fromCell.velocityY = 0.0f;
-                    fromCell.updateColor();  // Use proper vacuum color from updateColor()
+                    fromCell.convertToVacuum();
                     fromCell.updated = true;
                 } else {
                     // Cell still has mass - keep as gas
@@ -1095,17 +1179,8 @@ bool GasSim::update(float deltaTime) {
                 // Check if decay time has elapsed
                 if (cell.microMassDecayTime >= 0.0f) {
                     // COMPLETELY clear the cell - reset ALL fields
-                    cell.elementType = ElementType::Vacuum;
-                    cell.mass = 0.0f;
-                    cell.pressure = 0.0f;
-                    cell.temperature = -273.15f;
-                    cell.velocityX = 0.0f;
-                    cell.velocityY = 0.0f;
+                    cell.convertToVacuum();
                     cell.updated = false;
-                    cell.targetElementType = ElementType::Empty;
-                    cell.phaseTransitionProgress = 0.0f;
-                    cell.phaseTransitionSpeed = 0.0f;
-                    cell.microMassDecayTime = 0.0f;
                     
                     // Force color update to vacuum (dark)
                     cell.color = sf::Color(10, 10, 15);

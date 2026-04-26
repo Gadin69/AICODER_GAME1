@@ -35,6 +35,239 @@ void FluidSim::initializeLiquidTypes() {
     std::cout << "[FluidSim] Total liquid types: " << liquidTypes.size() << std::endl;
 }
 
+// Check if a liquid cell is trapped between denser liquids on LEFT or RIGHT side
+// A liquid is NOT trapped if it has vacuum or gas adjacent (sides or down) - it has an escape route
+// Returns true if the cell CANNOT receive mass from above (buoyancy restriction)
+bool FluidSim::isTrappedBetweenDenserLiquids(int x, int y) {
+    if (!grid->isValidPosition(x, y)) return false;
+    
+    Cell& cell = grid->getCell(x, y);
+    if (!isLiquidType(cell.elementType)) return false;
+    
+    const Element& cellProps = ElementTypes::getElement(cell.elementType);
+    
+    // FIRST: Check if there's an escape route (vacuum or gas) on sides, down, and diagonal-up
+    // If yes, the cell is NOT trapped even if denser liquid is adjacent
+    int escapeDirs[7][2] = {
+        {-1, 0},   // LEFT
+        {1, 0},    // RIGHT
+        {0, 1},    // DOWN
+        {-1, -1},  // DIAGONAL-UP-LEFT
+        {1, -1}    // DIAGONAL-UP-RIGHT
+    };
+    for (auto& dir : escapeDirs) {
+        int ex = x + dir[0];
+        int ey = y + dir[1];
+        
+        if (!grid->isValidPosition(ex, ey)) continue;
+        
+        Cell& escapeCell = grid->getCell(ex, ey);
+        const Element& escapeProps = ElementTypes::getElement(escapeCell.elementType);
+        
+        // Vacuum or gas = escape route exists
+        if (escapeCell.elementType == ElementType::Vacuum || escapeProps.isGas) {
+            return false;  // NOT trapped - has escape route
+        }
+    }
+    
+    // NO escape route found - check if trapped between denser liquids on LEFT or RIGHT
+    bool leftDenser = false;
+    bool rightDenser = false;
+    
+    // Check LEFT neighbor
+    int leftX = x - 1;
+    if (grid->isValidPosition(leftX, y)) {
+        Cell& leftCell = grid->getCell(leftX, y);
+        if (isLiquidType(leftCell.elementType)) {
+            const Element& leftProps = ElementTypes::getElement(leftCell.elementType);
+            if (leftProps.density > cellProps.density) {
+                leftDenser = true;
+            }
+        }
+    }
+    
+    // Check RIGHT neighbor
+    int rightX = x + 1;
+    if (grid->isValidPosition(rightX, y)) {
+        Cell& rightCell = grid->getCell(rightX, y);
+        if (isLiquidType(rightCell.elementType)) {
+            const Element& rightProps = ElementTypes::getElement(rightCell.elementType);
+            if (rightProps.density > cellProps.density) {
+                rightDenser = true;
+            }
+        }
+    }
+    
+    // Trapped if denser liquid on LEFT OR RIGHT (and no escape route)
+    return leftDenser || rightDenser;
+}
+
+// Displace function: tries to move target cell out of the way when liquid wants to enter it
+// PRIORITY 1: Push into VACUUM
+// PRIORITY 2: Push into SAME-TYPE (allow over-mass)
+// PRIORITY 3: Swap as fallback
+// Returns true if displacement succeeded, false if no escape route
+bool FluidSim::Displace(int fromX, int fromY, int targetX, int targetY,
+                        std::vector<std::vector<bool>>& isMergeSource,
+                        std::vector<std::vector<bool>>& isMergeTarget,
+                        std::vector<std::vector<bool>>& isSwapInvolved,
+                        std::vector<DisplacedGas>& displacedGasQueue,
+                        std::vector<FlowAction>& flowActions) {
+    
+    Cell& fromCell = grid->getCell(fromX, fromY);
+    Cell& targetCell = grid->getCell(targetX, targetY);
+    ElementType fromType = fromCell.elementType;
+    ElementType targetType = targetCell.elementType;
+    
+    // Check reservations
+    if (isSwapInvolved[fromY][fromX] || isSwapInvolved[targetY][targetX] ||
+        isMergeSource[fromY][fromX] || isMergeTarget[fromY][fromX]) {
+        return false;
+    }
+    
+    bool displaced = false;
+    int escapeDirs[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+    
+    // PRIORITY 1: Push target into VACUUM
+    for (auto& dir : escapeDirs) {
+        int ex = targetX + dir[0];
+        int ey = targetY + dir[1];
+        
+        if (ex == fromX && ey == fromY) continue;  // Skip the source cell
+        if (!grid->isValidPosition(ex, ey)) continue;
+        
+        Cell& escapeCell = grid->getCell(ex, ey);
+        if (escapeCell.elementType == ElementType::Vacuum) {
+            // Create flow actions to move target to vacuum, then source to target
+            // Step 1: Move target mass to vacuum
+            FlowAction moveTargetToVacuum;
+            moveTargetToVacuum.fromX = targetX; moveTargetToVacuum.fromY = targetY;
+            moveTargetToVacuum.toX = ex; moveTargetToVacuum.toY = ey;
+            moveTargetToVacuum.massToMove = targetCell.mass;
+            moveTargetToVacuum.temperature = targetCell.temperature;
+            moveTargetToVacuum.type = targetType;
+            moveTargetToVacuum.isMerge = true;  // Merge into vacuum (will convert it)
+            flowActions.push_back(moveTargetToVacuum);
+            
+            // Step 2: Move source mass to target position
+            FlowAction moveSourceToTarget;
+            moveSourceToTarget.fromX = fromX; moveSourceToTarget.fromY = fromY;
+            moveSourceToTarget.toX = targetX; moveSourceToTarget.toY = targetY;
+            moveSourceToTarget.massToMove = fromCell.mass;
+            moveSourceToTarget.temperature = fromCell.temperature;
+            moveSourceToTarget.type = fromType;
+            moveSourceToTarget.isMerge = true;
+            flowActions.push_back(moveSourceToTarget);
+            
+            isMergeSource[targetY][targetX] = true;
+            isMergeTarget[ey][ex] = true;
+            isMergeSource[fromY][fromX] = true;
+            isMergeTarget[targetY][targetX] = true;
+            displaced = true;
+            break;
+        }
+    }
+    
+    // PRIORITY 2: Push target into SAME-TYPE (allow over-mass)
+    if (!displaced) {
+        for (auto& dir : escapeDirs) {
+            int ex = targetX + dir[0];
+            int ey = targetY + dir[1];
+            
+            if (ex == fromX && ey == fromY) continue;  // Skip the source cell
+            if (!grid->isValidPosition(ex, ey)) continue;
+            
+            Cell& escapeCell = grid->getCell(ex, ey);
+            if (escapeCell.elementType == targetType) {
+                // Create flow actions to merge target into same-type, then move source to target
+                // Step 1: Merge target into same-type neighbor (allow over-mass)
+                FlowAction mergeTargetToSame;
+                mergeTargetToSame.fromX = targetX; mergeTargetToSame.fromY = targetY;
+                mergeTargetToSame.toX = ex; mergeTargetToSame.toY = ey;
+                mergeTargetToSame.massToMove = targetCell.mass;
+                mergeTargetToSame.temperature = targetCell.temperature;
+                mergeTargetToSame.type = targetType;
+                mergeTargetToSame.isMerge = true;
+                flowActions.push_back(mergeTargetToSame);
+                
+                // Step 2: Move source mass to target position
+                FlowAction moveSourceToTarget;
+                moveSourceToTarget.fromX = fromX; moveSourceToTarget.fromY = fromY;
+                moveSourceToTarget.toX = targetX; moveSourceToTarget.toY = targetY;
+                moveSourceToTarget.massToMove = fromCell.mass;
+                moveSourceToTarget.temperature = fromCell.temperature;
+                moveSourceToTarget.type = fromType;
+                moveSourceToTarget.isMerge = true;
+                flowActions.push_back(moveSourceToTarget);
+                
+                isMergeSource[targetY][targetX] = true;
+                isMergeTarget[ey][ex] = true;
+                isMergeSource[fromY][fromX] = true;
+                isMergeTarget[targetY][targetX] = true;
+                displaced = true;
+                break;
+            }
+        }
+    }
+    
+    // PRIORITY 3: Swap if no escape route (only for gas)
+    if (!displaced && targetType != ElementType::Vacuum) {
+        const Element& targetProps = ElementTypes::getElement(targetType);
+        
+        // For gas: check if we can swap
+        if (targetProps.isGas) {
+            float maxGasMass = GasSim::getMaxMassForElement(targetType);
+            
+            if (targetCell.mass > maxGasMass) {
+                if (!hasGasEscapeRoute(targetX, targetY, targetType)) {
+                    return false;  // Air pocket, can't displace
+                }
+            }
+            
+            // Queue gas for later displacement processing
+            DisplacedGas displacedGas;
+            displacedGas.x = targetX;
+            displacedGas.y = targetY;
+            displacedGas.mass = targetCell.mass;
+            displacedGas.temperature = targetCell.temperature;
+            displacedGas.type = targetType;
+            displacedGasQueue.push_back(displacedGas);
+            
+            // Create flow action for liquid overwriting gas
+            FlowAction action;
+            action.fromX = fromX; action.fromY = fromY;
+            action.toX = targetX; action.toY = targetY;
+            action.massToMove = fromCell.mass;
+            action.temperature = fromCell.temperature;
+            action.type = fromType;
+            action.isMerge = false;
+            action.overwriteGas = true;
+            flowActions.push_back(action);
+            
+            isSwapInvolved[fromY][fromX] = true;
+            isSwapInvolved[targetY][targetX] = true;
+            displaced = true;
+        }
+        // For liquid: just swap
+        else if (targetProps.isLiquid) {
+            FlowAction action;
+            action.fromX = fromX; action.fromY = fromY;
+            action.toX = targetX; action.toY = targetY;
+            action.massToMove = fromCell.mass;
+            action.temperature = fromCell.temperature;
+            action.type = fromType;
+            action.isMerge = false;
+            flowActions.push_back(action);
+            
+            isSwapInvolved[fromY][fromX] = true;
+            isSwapInvolved[targetY][targetX] = true;
+            displaced = true;
+        }
+    }
+    
+    return displaced;
+}
+
 bool FluidSim::update(float deltaTime) {
     if (!enabled || !grid) return false;
     
@@ -49,16 +282,6 @@ bool FluidSim::update(float deltaTime) {
     // LIQUID FLOW SYSTEM: Mass-transfer based flow (like gas, but inverted for gravity)
     // Priority: DOWN, DOWN-DIAGONALS, SIDEWAYS
     // Mass transfer rate based on viscosity
-    
-    struct FlowAction {
-        int fromX, fromY;
-        int toX, toY;
-        float massToMove;
-        float temperature;
-        ElementType type;
-        bool isMerge;  // true = merge into target, false = swap
-        bool overwriteGas = false;  // true = liquid overwriting gas (not a swap)
-    };
     
     std::vector<FlowAction> flowActions;
     flowActions.reserve(width * height / 4);
@@ -85,6 +308,135 @@ bool FluidSim::update(float deltaTime) {
             float cellMass = cell.mass;
             const Element& props = ElementTypes::getElement(cell.elementType);
             
+            bool actedThisTick = false;  // Track if cell acted this tick
+            
+            // PRIORITY 0: OVER-MASS OOZING (immediate, explosive pressure release)
+            float maxMass = GasSim::getMaxMassForElement(cell.elementType);
+            
+            if (cellMass > maxMass) {
+                float excessMass = cellMass - maxMass;
+                
+                // Check neighbors in order: DOWN, LEFT, RIGHT, UP
+                int neighborDirs[4][2] = {{0, 1}, {-1, 0}, {1, 0}, {0, -1}};
+                
+                for (auto& dir : neighborDirs) {
+                    int nx = x + dir[0];
+                    int ny = y + dir[1];
+                    
+                    if (!grid->isValidPosition(nx, ny)) continue;
+                    if (excessMass <= 0.0f) break;  // No more excess to transfer
+                    
+                    Cell& neighbor = grid->getCell(nx, ny);
+                    ElementType neighborType = neighbor.elementType;
+                    
+                    // Skip solids
+                    const Element& neighborProps = ElementTypes::getElement(neighborType);
+                    if (!neighborProps.isGas && !neighborProps.isLiquid && neighborType != ElementType::Vacuum) {
+                        continue;
+                    }
+                    
+                    bool acted = false;
+                    
+                    // CASE 1: Vacuum - direct mass transfer
+                    if (neighborType == ElementType::Vacuum) {
+                        if (!isMergeSource[y][x] && !isMergeTarget[y][x] &&
+                            !isMergeSource[ny][nx] && !isMergeTarget[ny][nx]) {
+                            
+                            // Convert vacuum to liquid with excess mass
+                            neighbor.elementType = cell.elementType;
+                            neighbor.temperature = cell.temperature;
+                            
+                            FlowAction action;
+                            action.fromX = x; action.fromY = y;
+                            action.toX = nx; action.toY = ny;
+                            action.massToMove = excessMass;
+                            action.temperature = cell.temperature;
+                            action.type = cell.elementType;
+                            action.isMerge = true;
+                            flowActions.push_back(action);
+                            
+                            isMergeSource[y][x] = true;
+                            isMergeTarget[ny][nx] = true;
+                            acted = true;
+                        }
+                    }
+                    // CASE 2: Gas - displace gas, transfer liquid
+                    else if (neighborProps.isGas) {
+                        if (!isSwapInvolved[y][x] && !isSwapInvolved[ny][nx] &&
+                            !isMergeSource[y][x] && !isMergeTarget[y][x]) {
+                            
+                            // Queue gas for displacement
+                            DisplacedGas displacedGas;
+                            displacedGas.x = nx;
+                            displacedGas.y = ny;
+                            displacedGas.mass = neighbor.mass;
+                            displacedGas.temperature = neighbor.temperature;
+                            displacedGas.type = neighborType;
+                            displacedGasQueue.push_back(displacedGas);
+                            
+                            // Create flow action for liquid overwriting gas
+                            FlowAction action;
+                            action.fromX = x; action.fromY = y;
+                            action.toX = nx; action.toY = ny;
+                            action.massToMove = excessMass;
+                            action.temperature = cell.temperature;
+                            action.type = cell.elementType;
+                            action.isMerge = false;
+                            action.overwriteGas = true;
+                            flowActions.push_back(action);
+                            
+                            isSwapInvolved[y][x] = true;
+                            isSwapInvolved[ny][nx] = true;
+                            acted = true;
+                        }
+                    }
+                    // CASE 3: Same liquid type - equalize (transfer until both equal or target full)
+                    else if (neighborType == cell.elementType && isLiquidType(neighborType)) {
+                        if (!isMergeSource[y][x] && !isMergeTarget[y][x] &&
+                            !isMergeSource[ny][nx] && !isMergeTarget[ny][nx]) {
+                            
+                            float targetMaxMass = GasSim::getMaxMassForElement(neighborType);
+                            float spaceInTarget = targetMaxMass - neighbor.mass;
+                            
+                            // Transfer min(excessMass, spaceInTarget)
+                            float massToTransfer = std::min(excessMass, spaceInTarget);
+                            
+                            if (massToTransfer > 0.0f) {
+                                FlowAction action;
+                                action.fromX = x; action.fromY = y;
+                                action.toX = nx; action.toY = ny;
+                                action.massToMove = massToTransfer;
+                                action.temperature = cell.temperature;
+                                action.type = cell.elementType;
+                                action.isMerge = true;
+                                flowActions.push_back(action);
+                                
+                                isMergeSource[y][x] = true;
+                                isMergeTarget[ny][nx] = true;
+                                acted = true;
+                            }
+                        }
+                    }
+                    // CASE 4: Lighter liquid - displace using Displace() function
+                    else if (isLiquidType(neighborType)) {
+                        const Element& cellProps = ElementTypes::getElement(cell.elementType);
+                        const Element& neighborProps2 = ElementTypes::getElement(neighborType);
+                        
+                        if (cellProps.density > neighborProps2.density) {
+                            if (Displace(x, y, nx, ny, isMergeSource, isMergeTarget, isSwapInvolved, displacedGasQueue, flowActions)) {
+                                acted = true;
+                            }
+                        }
+                    }
+                    // CASE 5: Denser liquid - skip
+                    
+                    if (acted) {
+                        actedThisTick = true;
+                        break;  // Stop at first valid neighbor
+                    }
+                }
+            }
+            
             // VISCOSITY-BASED LEAK PROBABILITY
             // High viscosity = low chance to leak, Low viscosity = high chance
             // Water (1.0) ~90% chance, Honey (50) ~20% chance, Lava (100) ~10% chance
@@ -99,7 +451,6 @@ bool FluidSim::update(float deltaTime) {
             // PRIORITY 1: MERGE DOWN into same liquid (fill cell below to max)
             int downX = x;
             int downY = y + 1;
-            bool actedThisTick = false;
             
             if (grid->isValidPosition(downX, downY) && !actedThisTick) {
                 Cell& below = grid->getCell(downX, downY);
@@ -115,9 +466,20 @@ bool FluidSim::update(float deltaTime) {
                 
                 // DOWN into SAME LIQUID - merge to fill up
                 if (isLiquidType(belowType) && belowType == cell.elementType) {
-                    if (!isMergeSource[y][x] && !isMergeTarget[y][x] &&
+                    // RESTRICTION 1: If the BELOW cell is trapped between denser liquids on either side,
+                    // it CANNOT receive mass from above (only from below or sides)
+                    if (isTrappedBetweenDenserLiquids(downX, downY)) {
+                        // Skip - trapped cell cannot receive from above
+                    }
+                    // RESTRICTION 2: If the CURRENT cell is trapped between denser liquids,
+                    // it should NOT merge downward - it needs to ooze upward instead (PRIORITY 1.5)
+                    else if (isTrappedBetweenDenserLiquids(x, y)) {
+                        // Skip - trapped cell should ooze upward, not merge down
+                    }
+                    else if (!isMergeSource[y][x] && !isMergeTarget[y][x] &&
                         !isMergeSource[downY][downX] && !isMergeTarget[downY][downX]) {
-                        float spaceAvailable = 1000.0f - below.mass;
+                        float maxMass = GasSim::getMaxMassForElement(belowType);
+                        float spaceAvailable = maxMass - below.mass;
                         float mergeAmount = std::min(cellMass, spaceAvailable);
                         
                         if (mergeAmount >= 0.001f) {
@@ -200,9 +562,196 @@ bool FluidSim::update(float deltaTime) {
                                    (isLiquidType(checkBelowType) && checkBelowType == cell.elementType));
             }
             
+            // PRIORITY 1.5: UPWARD OOZING - If lighter liquid is trapped between denser liquids on left OR right
+            // It should ooze upward into gas/vacuum above (like viscosity-based leaking, but upward)
+            if (!actedThisTick && isLiquidType(cell.elementType)) {
+                int leftX = x - 1;
+                int rightX = x + 1;
+                int upY = y - 1;
+                
+                // Check if left or right neighbors are liquids DENSER than this cell
+                bool leftDenser = false;
+                bool rightDenser = false;
+                
+                if (grid->isValidPosition(leftX, y)) {
+                    Cell& leftCell = grid->getCell(leftX, y);
+                    if (isLiquidType(leftCell.elementType)) {
+                        const Element& leftProps = ElementTypes::getElement(leftCell.elementType);
+                        const Element& cellProps = ElementTypes::getElement(cell.elementType);
+                        if (leftProps.density > cellProps.density) {
+                            leftDenser = true;
+                        }
+                    }
+                }
+                
+                if (grid->isValidPosition(rightX, y)) {
+                    Cell& rightCell = grid->getCell(rightX, y);
+                    if (isLiquidType(rightCell.elementType)) {
+                        const Element& rightProps = ElementTypes::getElement(rightCell.elementType);
+                        const Element& cellProps = ElementTypes::getElement(cell.elementType);
+                        if (rightProps.density > cellProps.density) {
+                            rightDenser = true;
+                        }
+                    }
+                }
+                
+                // If liquid has denser liquid on EITHER side, try escape movements in priority order
+                if (leftDenser || rightDenser) {
+                    // PRIORITY 1: Merge sideways into SAME-TYPE liquid (can over-pressurize)
+                    if (shouldLeak) {
+                        int sideDirs[2] = {-1, 1};  // LEFT, RIGHT
+                        for (int side = 0; side < 2 && !actedThisTick; side++) {
+                            int sideX = x + sideDirs[side];
+                            int sideY = y;
+                            
+                            if (!grid->isValidPosition(sideX, sideY)) continue;
+                            
+                            Cell& sideCell = grid->getCell(sideX, sideY);
+                            if (sideCell.elementType == cell.elementType && isLiquidType(sideCell.elementType)) {
+                                // Merge into same-type sideways (allow over-mass)
+                                if (!isMergeSource[y][x] && !isMergeTarget[y][x] &&
+                                    !isMergeSource[sideY][sideX] && !isMergeTarget[sideY][sideX]) {
+                                    
+                                    FlowAction action;
+                                    action.fromX = x; action.fromY = y;
+                                    action.toX = sideX; action.toY = sideY;
+                                    action.massToMove = cellMass * 0.5f;
+                                    action.temperature = cell.temperature;
+                                    action.type = cell.elementType;
+                                    action.isMerge = true;
+                                    flowActions.push_back(action);
+                                    
+                                    isMergeSource[y][x] = true;
+                                    isMergeTarget[sideY][sideX] = true;
+                                    actedThisTick = true;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // PRIORITY 2: Merge upward into SAME-TYPE liquid
+                    if (!actedThisTick && shouldLeak && grid->isValidPosition(x, upY)) {
+                        Cell& above = grid->getCell(x, upY);
+                        if (above.elementType == cell.elementType && isLiquidType(above.elementType)) {
+                            if (!isMergeSource[y][x] && !isMergeTarget[y][x] &&
+                                !isMergeSource[upY][x] && !isMergeTarget[upY][x]) {
+                                
+                                float maxLiquidMass = GasSim::getMaxMassForElement(above.elementType);
+                                float availableSpace = maxLiquidMass - above.mass;
+                                float massToMove = std::min(cellMass * 0.5f, availableSpace);
+                                
+                                if (massToMove > 0.0f) {
+                                    FlowAction action;
+                                    action.fromX = x; action.fromY = y;
+                                    action.toX = x; action.toY = upY;
+                                    action.massToMove = massToMove;
+                                    action.temperature = cell.temperature;
+                                    action.type = cell.elementType;
+                                    action.isMerge = true;
+                                    flowActions.push_back(action);
+                                    
+                                    isMergeSource[y][x] = true;
+                                    isMergeTarget[upY][x] = true;
+                                    actedThisTick = true;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // PRIORITY 3: Diagonal upward merge into SAME-TYPE
+                    if (!actedThisTick && shouldLeak) {
+                        int diagDirs[2][2] = {{-1, -1}, {1, -1}};  // Up-Left, Up-Right
+                        
+                        for (auto& dir : diagDirs) {
+                            int diagX = x + dir[0];
+                            int diagY = y + dir[1];
+                            
+                            if (!grid->isValidPosition(diagX, diagY)) continue;
+                            
+                            Cell& diagCell = grid->getCell(diagX, diagY);
+                            if (diagCell.elementType == cell.elementType && isLiquidType(diagCell.elementType)) {
+                                if (!isMergeSource[y][x] && !isMergeTarget[y][x] &&
+                                    !isMergeSource[diagY][diagX] && !isMergeTarget[diagY][diagX]) {
+                                    
+                                    float maxLiquidMass = GasSim::getMaxMassForElement(diagCell.elementType);
+                                    float availableSpace = maxLiquidMass - diagCell.mass;
+                                    float massToMove = std::min(cellMass * 0.3f, availableSpace);
+                                    
+                                    if (massToMove > 0.0f) {
+                                        FlowAction action;
+                                        action.fromX = x; action.fromY = y;
+                                        action.toX = diagX; action.toY = diagY;
+                                        action.massToMove = massToMove;
+                                        action.temperature = cell.temperature;
+                                        action.type = cell.elementType;
+                                        action.isMerge = true;
+                                        flowActions.push_back(action);
+                                        
+                                        isMergeSource[y][x] = true;
+                                        isMergeTarget[diagY][diagX] = true;
+                                        actedThisTick = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // PRIORITY 4: Diagonal upward swap with DENSER liquid only (last resort, immediate - no viscosity check)
+                    if (!actedThisTick) {
+                        int diagDirs[2][2] = {{-1, -1}, {1, -1}};  // Up-Left, Up-Right
+                        
+                        for (auto& dir : diagDirs) {
+                            int diagX = x + dir[0];
+                            int diagY = y + dir[1];
+                            
+                            if (!grid->isValidPosition(diagX, diagY)) continue;
+                            
+                            Cell& diagCell = grid->getCell(diagX, diagY);
+                            
+                            // Only swap with DENSER liquids
+                            if (isLiquidType(diagCell.elementType)) {
+                                const Element& diagProps = ElementTypes::getElement(diagCell.elementType);
+                                const Element& cellProps = ElementTypes::getElement(cell.elementType);
+                                
+                                if (diagProps.density > cellProps.density) {
+                                    if (!isSwapInvolved[y][x] && !isSwapInvolved[diagY][diagX] &&
+                                        !isMergeSource[y][x] && !isMergeTarget[y][x]) {
+                                        
+                                        FlowAction action;
+                                        action.fromX = x; action.fromY = y;
+                                        action.toX = diagX; action.toY = diagY;
+                                        action.massToMove = cellMass;
+                                        action.temperature = cell.temperature;
+                                        action.type = cell.elementType;
+                                        action.isMerge = false;
+                                        flowActions.push_back(action);
+                                        
+                                        isSwapInvolved[y][x] = true;
+                                        isSwapInvolved[diagY][diagX] = true;
+                                        actedThisTick = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
             // Only spread sideways if: didn't act this tick AND (blocked downward by solid)
             // Don't spread if downward is possible but blocked by viscosity (honey should fall, not spread)
             bool canSpreadSideways = !actedThisTick && cellMass >= MIN_SIDEWAY_MASS && !downwardPossible;
+            
+            // DEBUG: Log why water isn't spreading
+            if (cell.elementType == ElementType::Liquid_Water && cellMass > 1.0f) {
+                static int debugCounter = 0;
+                if (debugCounter++ % 60 == 0) {  // Log every 60 ticks
+                    printf("Water at (%d,%d): acted=%d, mass=%.1f, downwardPossible=%d, canSpread=%d\n",
+                           x, y, actedThisTick, cellMass, downwardPossible, canSpreadSideways);
+                }
+            }
+            
             if (canSpreadSideways) {
                 int sideDirs[2] = {-1, 1};  // LEFT, RIGHT
                 for (int side = 0; side < 2 && !actedThisTick; side++) {
@@ -240,35 +789,41 @@ bool FluidSim::update(float deltaTime) {
                             actedThisTick = true;
                         }
                     }
-                    // SIDE into GAS - displace 100% (full swap)
+                    // SIDE into GAS - use Displace function
                     else if (canDisplace(cell.elementType, sideType)) {
-                        float maxGasMass = GasSim::getMaxMassForElement(sideType);
+                        if (Displace(x, y, sideX, sideY, isMergeSource, isMergeTarget, isSwapInvolved, displacedGasQueue, flowActions)) {
+                            actedThisTick = true;
+                        }
+                    }
+                    // SIDE into LIGHTER LIQUID - use Displace function
+                    else if (isLiquidType(sideType) && sideType != cell.elementType) {
+                        const Element& cellProps = ElementTypes::getElement(cell.elementType);
+                        const Element& sideProps = ElementTypes::getElement(sideType);
                         
-                        if (sideCell.mass > maxGasMass) {
-                            if (!hasGasEscapeRoute(sideX, sideY, sideType)) {
-                                continue;  // Air pocket, skip
+                        // DEBUG
+                        if (cell.elementType == ElementType::Liquid_Water && sideType == ElementType::Liquid_Oil) {
+                            static int dispDebug = 0;
+                            if (dispDebug++ % 30 == 0) {
+                                printf("Water->Oil displacement attempt: waterDensity=%.0f, oilDensity=%.0f, canDisplace=%d\n",
+                                       cellProps.density, sideProps.density, cellProps.density > sideProps.density);
                             }
                         }
                         
-                        if (!isSwapInvolved[y][x] && !isSwapInvolved[sideY][sideX] &&
-                            !isMergeSource[y][x] && !isMergeTarget[y][x]) {
-                            // Queue gas for displacement
-                            DisplacedGas displaced;
-                            displaced.x = sideX;
-                            displaced.y = sideY;
-                            displaced.mass = sideCell.mass;
-                            displaced.temperature = sideCell.temperature;
-                            displaced.type = sideType;
-                            displacedGasQueue.push_back(displaced);
+                        // Only displace if current liquid is DENSER than side liquid
+                        if (cellProps.density > sideProps.density) {
+                            bool result = Displace(x, y, sideX, sideY, isMergeSource, isMergeTarget, isSwapInvolved, displacedGasQueue, flowActions);
                             
-                            action.massToMove = cellMass;
-                            action.isMerge = false;
-                            action.overwriteGas = true;
-                            flowActions.push_back(action);
+                            // DEBUG
+                            if (cell.elementType == ElementType::Liquid_Water) {
+                                static int dispResultDebug = 0;
+                                if (dispResultDebug++ % 30 == 0) {
+                                    printf("Displace() returned: %d\n", result);
+                                }
+                            }
                             
-                            isSwapInvolved[y][x] = true;
-                            isSwapInvolved[sideY][sideX] = true;
-                            actedThisTick = true;
+                            if (result) {
+                                actedThisTick = true;
+                            }
                         }
                     }
                 }
@@ -309,7 +864,8 @@ bool FluidSim::update(float deltaTime) {
                         continue;
                     }
                     
-                    float spaceAvailable = 1000.0f - sideCell.mass;
+                    float maxMass = GasSim::getMaxMassForElement(sideCell.elementType);
+                    float spaceAvailable = maxMass - sideCell.mass;
                     float mergeAmount = std::min(cellMass * 0.1f, spaceAvailable);  // Give 10% or fill space
                     
                     if (mergeAmount >= 0.001f) {
@@ -362,7 +918,8 @@ bool FluidSim::update(float deltaTime) {
                     if (!isMergeSource[y][x] && !isMergeTarget[y][x] &&
                         !isMergeSource[bestY][bestX] && !isMergeTarget[bestY][bestX]) {
                         
-                        float spaceAvailable = 1000.0f - grid->getCell(bestX, bestY).mass;
+                        float maxMass = GasSim::getMaxMassForElement(grid->getCell(bestX, bestY).elementType);
+                        float spaceAvailable = maxMass - grid->getCell(bestX, bestY).mass;
                         float mergeAmount = std::min(cellMass, spaceAvailable);
                         
                         if (mergeAmount >= 0.001f) {
@@ -547,17 +1104,7 @@ bool FluidSim::update(float deltaTime) {
         if (action.fromX == action.toX && action.fromY == action.toY && action.type == ElementType::Vacuum) {
             // This is a cleanup action - convert cell to vacuum
             Cell& cell = grid->getCell(action.fromX, action.fromY);
-            cell.elementType = ElementType::Vacuum;
-            cell.mass = 0.0f;
-            cell.temperature = -273.15f;
-            cell.velocityX = 0.0f;
-            cell.velocityY = 0.0f;
-            cell.updated = false;
-            cell.targetElementType = ElementType::Empty;
-            cell.phaseTransitionProgress = 0.0f;
-            cell.phaseTransitionSpeed = 0.0f;
-            cell.microMassDecayTime = 0.0f;
-            cell.updateColor();  // Use proper vacuum color
+            cell.convertToVacuum();
             continue;
         }
         
@@ -566,7 +1113,9 @@ bool FluidSim::update(float deltaTime) {
         
         if (action.isMerge) {
             // MERGE: Add mass to target (WITH CAP CHECK to prevent overflow)
-            float spaceAvailable = 1000.0f - toCell.mass;  // 1000kg max per cell (1 cubic meter of water)
+            // Use the ACTUAL element type's max mass, not hardcoded 1000kg
+            float maxMass = GasSim::getMaxMassForElement(toCell.elementType);
+            float spaceAvailable = maxMass - toCell.mass;
             
             // CRITICAL: Cap by ACTUAL source mass at application time
             // (source may have already sent mass in previous actions this tick)
@@ -589,17 +1138,7 @@ bool FluidSim::update(float deltaTime) {
             fromCell.mass -= actualMergeAmount;
             if (fromCell.mass < 0.001f) {
                 // Source became micro-cell - convert to vacuum
-                fromCell.elementType = ElementType::Vacuum;
-                fromCell.mass = 0.0f;
-                fromCell.temperature = -273.15f;
-                fromCell.velocityX = 0.0f;
-                fromCell.velocityY = 0.0f;
-                fromCell.updated = false;
-                fromCell.targetElementType = ElementType::Empty;
-                fromCell.phaseTransitionProgress = 0.0f;
-                fromCell.phaseTransitionSpeed = 0.0f;
-                fromCell.microMassDecayTime = 0.0f;
-                fromCell.updateColor();  // Use proper vacuum color
+                fromCell.convertToVacuum();
             } else {
                 fromCell.updated = true;
             }
@@ -620,17 +1159,7 @@ bool FluidSim::update(float deltaTime) {
                 fromCell.mass -= action.massToMove;
                 if (fromCell.mass < 0.001f) {
                     // Source became micro-cell - convert to vacuum
-                    fromCell.elementType = ElementType::Vacuum;
-                    fromCell.mass = 0.0f;
-                    fromCell.temperature = -273.15f;
-                    fromCell.velocityX = 0.0f;
-                    fromCell.velocityY = 0.0f;
-                    fromCell.updated = false;
-                    fromCell.targetElementType = ElementType::Empty;
-                    fromCell.phaseTransitionProgress = 0.0f;
-                    fromCell.phaseTransitionSpeed = 0.0f;
-                    fromCell.microMassDecayTime = 0.0f;
-                    fromCell.updateColor();  // Use proper vacuum color
+                    fromCell.convertToVacuum();
                 } else {
                     fromCell.updated = true;
                     fromCell.updateColor();
@@ -651,30 +1180,10 @@ bool FluidSim::update(float deltaTime) {
                 toCell.color = fromCell.color;
                 
                 // Source becomes vacuum
-                fromCell.elementType = ElementType::Vacuum;
-                fromCell.mass = 0.0f;
-                fromCell.temperature = -273.15f;
-                fromCell.velocityX = 0.0f;
-                fromCell.velocityY = 0.0f;
-                fromCell.updated = false;
-                fromCell.targetElementType = ElementType::Empty;
-                fromCell.phaseTransitionProgress = 0.0f;
-                fromCell.phaseTransitionSpeed = 0.0f;
-                fromCell.microMassDecayTime = 0.0f;
-                fromCell.updateColor();  // Use proper vacuum color
+                fromCell.convertToVacuum();
             } else if (action.type == ElementType::Vacuum && action.fromX == action.toX && action.fromY == action.toY) {
                 // Cleanup action: Convert cell to vacuum (leftover micro-mass)
-                fromCell.elementType = ElementType::Vacuum;
-                fromCell.mass = 0.0f;
-                fromCell.temperature = -273.15f;
-                fromCell.velocityX = 0.0f;
-                fromCell.velocityY = 0.0f;
-                fromCell.updated = false;
-                fromCell.targetElementType = ElementType::Empty;
-                fromCell.phaseTransitionProgress = 0.0f;
-                fromCell.phaseTransitionSpeed = 0.0f;
-                fromCell.microMassDecayTime = 0.0f;
-                fromCell.updateColor();  // Use proper vacuum color
+                fromCell.convertToVacuum();
             } else {
                 // Swapping with gas or different liquid
                 ElementType tempType = fromCell.elementType;
@@ -770,9 +1279,7 @@ bool FluidSim::update(float deltaTime) {
                 gasCell.updateColor();
             } else {
                 // No liquid waiting, just clear gas
-                gasCell.elementType = ElementType::Vacuum;
-                gasCell.mass = 0.0f;
-                gasCell.temperature = -273.15f;
+                gasCell.convertToVacuum();
                 gasCell.updated = true;
             }
             continue;
@@ -816,9 +1323,7 @@ bool FluidSim::update(float deltaTime) {
                 gasCell.updateColor();
             } else {
                 // No liquid waiting, just clear gas
-                gasCell.elementType = ElementType::Vacuum;
-                gasCell.mass = 0.0f;
-                gasCell.temperature = -273.15f;
+                gasCell.convertToVacuum();
                 gasCell.updated = true;
             }
             continue;
@@ -840,9 +1345,7 @@ bool FluidSim::update(float deltaTime) {
             gasCell.microMassDecayTime = 0.0f;
             gasCell.updateColor();
         } else {
-            gasCell.elementType = ElementType::Vacuum;
-            gasCell.mass = 0.0f;
-            gasCell.temperature = -273.15f;
+            gasCell.convertToVacuum();
             gasCell.updated = true;
         }
     }
@@ -900,19 +1403,8 @@ void FluidSim::moveLiquidDown(int x, int y) {
         belowCell.microMassDecayTime = 0.0f;
         belowCell.color = cell.color;
         
-        // Source becomes vacuum - reset ALL data to vacuum defaults (COMPLETE cleanup)
-        cell.elementType = ElementType::Vacuum;
-        cell.mass = 0.0f;
-        cell.pressure = 0.0f;
-        cell.temperature = -273.15f;
-        cell.velocityX = 0.0f;
-        cell.velocityY = 0.0f;
-        cell.updated = false;
-        cell.targetElementType = ElementType::Empty;
-        cell.phaseTransitionProgress = 0.0f;
-        cell.phaseTransitionSpeed = 0.0f;
-        cell.microMassDecayTime = 0.0f;
-        cell.updateColor();  // Use proper vacuum color
+        // Source becomes vacuum - use helper function to ensure proper cleanup
+        cell.convertToVacuum();
         return;
     }
     
@@ -951,19 +1443,8 @@ void FluidSim::moveLiquidSideways(int x, int y) {
             belowNeighbor.temperature = cell.temperature;
             belowNeighbor.color = cell.color;
             
-            // Source becomes vacuum - reset ALL data (COMPLETE cleanup)
-            cell.elementType = ElementType::Vacuum;
-            cell.mass = 0.0f;
-            cell.pressure = 0.0f;
-            cell.temperature = -273.15f;
-            cell.velocityX = 0.0f;
-            cell.velocityY = 0.0f;
-            cell.updated = false;
-            cell.targetElementType = ElementType::Empty;
-            cell.phaseTransitionProgress = 0.0f;
-            cell.phaseTransitionSpeed = 0.0f;
-            cell.microMassDecayTime = 0.0f;
-            cell.updateColor();  // Use proper vacuum color
+            // Source becomes vacuum - use helper function to ensure proper cleanup
+            cell.convertToVacuum();
             return;
         }
         
@@ -983,19 +1464,8 @@ void FluidSim::moveLiquidSideways(int x, int y) {
             neighbor.microMassDecayTime = 0.0f;
             neighbor.color = cell.color;
             
-            // Source becomes vacuum - reset ALL data (COMPLETE cleanup)
-            cell.elementType = ElementType::Vacuum;
-            cell.mass = 0.0f;
-            cell.pressure = 0.0f;
-            cell.temperature = -273.15f;
-            cell.velocityX = 0.0f;
-            cell.velocityY = 0.0f;
-            cell.updated = false;
-            cell.targetElementType = ElementType::Empty;
-            cell.phaseTransitionProgress = 0.0f;
-            cell.phaseTransitionSpeed = 0.0f;
-            cell.microMassDecayTime = 0.0f;
-            cell.updateColor();  // Use proper vacuum color
+            // Source becomes vacuum - use helper function to ensure proper cleanup
+            cell.convertToVacuum();
             return;
         }
     }
@@ -1067,20 +1537,9 @@ void FluidSim::leakLiquidDiagonally(int x, int y, float deltaTime) {
             
             cell.mass -= leakAmount;
             
-            // If source has very little mass left, become vacuum (COMPLETE cleanup)
+            // If source has very little mass left, become vacuum - use helper function
             if (cell.mass < 0.01f) {
-                cell.elementType = ElementType::Vacuum;
-                cell.mass = 0.0f;
-                cell.pressure = 0.0f;
-                cell.temperature = -273.15f;
-                cell.velocityX = 0.0f;
-                cell.velocityY = 0.0f;
-                cell.updated = false;
-                cell.targetElementType = ElementType::Empty;
-                cell.phaseTransitionProgress = 0.0f;
-                cell.phaseTransitionSpeed = 0.0f;
-                cell.microMassDecayTime = 0.0f;
-                cell.updateColor();  // Use proper vacuum color
+                cell.convertToVacuum();
             }
             
             break;  // Only leak to one diagonal per tick

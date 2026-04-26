@@ -2,6 +2,7 @@
 
 #include "UIBorder.h"
 #include "UISlider.h"
+#include "UIElementSelector.h"
 #include <SFML/Graphics.hpp>
 
 class Renderer;  // Forward declaration
@@ -24,6 +25,7 @@ public:
     
     // Access UI elements
     UISlider* getSimSpeedSlider() { return simSpeedSlider; }
+    UIElementSelector* getElementSelector() { return elementSelector; }
     
     bool initialized = false;
     
@@ -37,6 +39,8 @@ private:
     
     // UI Elements
     UISlider* simSpeedSlider = nullptr;
+    UIElementSelector* elementSelector = nullptr;
     
     void buildSkillbarLayout();  // Creates skillbar border + children
+    void buildElementSelectorLayout();  // Creates element selector widget
 };

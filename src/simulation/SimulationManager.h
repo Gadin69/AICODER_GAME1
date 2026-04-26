@@ -32,6 +32,7 @@ public:
     HeatSim& getHeatSim() { return *heatSim; }
     FluidSim& getFluidSim() { return *fluidSim; }
     GasSim& getGasSim() { return *gasSim; }
+    bool isFluidSimInitialized() const { return fluidSim != nullptr; }
     
     // Threading controls
     void enableThreading(bool enable);
@@ -58,10 +59,10 @@ private:
     // LOD management
     ChunkManager chunkManager;
     
-    // Simulation systems
-    std::unique_ptr<HeatSim> heatSim;
-    std::unique_ptr<FluidSim> fluidSim;
-    std::unique_ptr<GasSim> gasSim;
+    // Simulation systems (raw pointers for access, owned by systems vector)
+    HeatSim* heatSim = nullptr;
+    FluidSim* fluidSim = nullptr;
+    GasSim* gasSim = nullptr;
     
     // Persistent worker threads
     std::vector<std::thread> workerThreads;

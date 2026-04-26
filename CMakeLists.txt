@@ -53,6 +53,7 @@ set(SOURCES
     src/ui/GameConsole.cpp
     src/ui/UIBorder.cpp
     src/ui/UIElement.cpp
+    src/ui/UIElementSelector.cpp
     src/ui/GameGUI.cpp
 )
 
@@ -106,6 +107,7 @@ set(HEADERS
     src/ui/GameConsole.h
     src/ui/UIBorder.h
     src/ui/UIElement.h
+    src/ui/UIElementSelector.h
     src/ui/GameGUI.h
 )
 

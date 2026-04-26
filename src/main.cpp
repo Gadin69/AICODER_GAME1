@@ -290,6 +290,20 @@ void handleMouseInput(const sf::Event& event) {
         } else if (isRightMouseHeld) {
             placeCellAtMouse(sf::Mouse::Button::Right);
         }
+    } else if (event.is<sf::Event::KeyPressed>()) {
+        // Forward to element selector (DevMode - use isAdminMode)
+        extern bool isAdminMode;
+        auto keyEvent = event.getIf<sf::Event::KeyPressed>();
+        if (isAdminMode && gameGUI && gameGUI->getElementSelector() && keyEvent) {
+            gameGUI->getElementSelector()->handleKeyPress(*keyEvent);
+        }
+    } else if (event.is<sf::Event::TextEntered>()) {
+        // Forward to element selector (DevMode - use isAdminMode)
+        extern bool isAdminMode;
+        auto textEvent = event.getIf<sf::Event::TextEntered>();
+        if (isAdminMode && gameGUI && gameGUI->getElementSelector() && textEvent) {
+            gameGUI->getElementSelector()->handleTextEntered(*textEvent);
+        }
     }
 }
 
@@ -316,9 +330,22 @@ void placeCellAtMouse(sf::Mouse::Button button) {
     }
     
     if (button == sf::Mouse::Button::Left) {
+        // Get current element from element selector (DevMode) or use currentElement
+        extern GameGUI* gameGUI;
+        extern bool isAdminMode;
+        ElementType placeElement = currentElement;
+        float placeTemp = ElementTypes::getElement(currentElement).defaultTemperature;  // Use element's default
+        float placeMass = ElementTypes::getElement(currentElement).density;  // Use element's density
+        
+        if (isAdminMode && gameGUI && gameGUI->getElementSelector()) {
+            placeElement = gameGUI->getElementSelector()->getSelectedElement();
+            placeTemp = gameGUI->getElementSelector()->getSelectedTemperature();
+            placeMass = gameGUI->getElementSelector()->getSelectedMass();
+        }
+        
         // Check if cell already has this element type - skip if so
         const Cell& existingCell = simGrid.getCell(tileX, tileY);
-        if (existingCell.elementType == currentElement) {
+        if (existingCell.elementType == placeElement) {
             return;  // Already has this element, don't overwrite
         }
         
@@ -332,28 +359,27 @@ void placeCellAtMouse(sf::Mouse::Button button) {
         simGrid.lock();
         
         // Place element
-        simGrid.setCellType(tileX, tileY, currentElement);
+        simGrid.setCellType(tileX, tileY, placeElement);
         
         // Set properties from element (DATA-DRIVEN)
         Cell& placedCell = simGrid.getCell(tileX, tileY);
-        ElementProperties props = ElementTypes::getElement(currentElement);
-        placedCell.temperature = props.defaultTemperature;
+        ElementProperties props = ElementTypes::getElement(placeElement);
+        placedCell.temperature = placeTemp;  // Use selected temperature
         
-        // ONI-STYLE: Set initial MASS (full cell by default)
-        // Mass = density × volume (1m³ per cell)
+        // ONI-STYLE: Set initial MASS (from selector)
+        // Mass = selected mass value
         // SAFETY: Ensure minimum mass to prevent division by zero in heat sim
         
         // GASES use mass like everything else
         if (props.isGas) {
-            // EXPERIMENT: 100kg gas spawn to test mass conservation
-            placedCell.mass = 100.0f;  // 100.0 kg for testing
+            placedCell.mass = placeMass;  // Use selected mass
             // Calculate initial pressure using ideal gas law
             placedCell.pressure = (placedCell.mass * 8.314f * (placedCell.temperature + 273.15f)) / 0.001f;
             
             // Mark cell as updated so it gets simulated next frame
             placedCell.updated = true;
         } else {
-            placedCell.mass = std::max(props.density, 1.0f);  // Full cell, minimum 1kg
+            placedCell.mass = std::max(placeMass, 1.0f);  // Use selected mass, minimum 1kg
             placedCell.pressure = 0.0f;
         }
         
@@ -539,6 +565,21 @@ void updateElementInspector() {
             char massBuf[100];
             snprintf(massBuf, sizeof(massBuf), "Mass: %.4f kg\n", cell.mass);
             info += massBuf;
+            
+            printf("DEBUG: Cell at (%d,%d) isLiquid=%d, isFluidInit=%d\n", 
+                   tileX, tileY, props.isLiquid, simManager.isFluidSimInitialized());
+            
+            // Show trapped status for liquids
+            if (props.isLiquid) {
+                if (simManager.isFluidSimInitialized()) {
+                    bool isTrapped = simManager.getFluidSim().isTrappedBetweenDenserLiquids(tileX, tileY);
+                    info += "Trapped: ";
+                    info += isTrapped ? "true" : "false";
+                    info += "\n";
+                } else {
+                    info += "Trapped: N/A (not initialized)\n";
+                }
+            }
             
             // Dev mode: Show updating status
             extern bool g_devmodeEnabled;

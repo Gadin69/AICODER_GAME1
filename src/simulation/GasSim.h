@@ -17,13 +17,16 @@ public:
     // Utility: Calculate maximum mass for an element based on density
     static float getMaxMassForElement(ElementType type);
     
+    // Utility: Check if an element type is a gas
+    static bool isGasTypeStatic(ElementType type);
+    
 private:
     // Initialize gas types dynamically at startup
     void initializeGasTypes();
     
     // Gas physics constants
     static constexpr float GAS_CONSTANT = 8.314f;  // J/(mol·K)
-    static constexpr float CELL_VOLUME = 0.001f;   // 1 liter per cell (m³)
+    static constexpr float CELL_VOLUME = 1.0f;     // 1 cubic meter per cell (m³)
     static constexpr float MIN_GAS_MASS = 0.001f;  // kg - minimum to keep gas cell
     static constexpr float GAS_COMPRESSION_MULTIPLIER = 10000.0f;  // Compression ratio for gases
     

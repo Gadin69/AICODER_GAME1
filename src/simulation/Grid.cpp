@@ -43,11 +43,7 @@ void Grid::setCellType(int x, int y, ElementType type) {
         
         // If setting to Vacuum, reset ALL cell data to vacuum defaults
         if (type == ElementType::Vacuum) {
-            cells[y][x].mass = 0.0f;
-            cells[y][x].pressure = 0.0f;
-            cells[y][x].temperature = -273.15f;  // Absolute zero
-            cells[y][x].velocityX = 0.0f;
-            cells[y][x].velocityY = 0.0f;
+            cells[y][x].convertToVacuum();
         }
         
         cells[y][x].updateColor();

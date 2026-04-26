@@ -16,9 +16,9 @@ public:
 // ============================================================================
 class VacuumElement : public Element {
 public:
-    VacuumElement() : Element("Vacuum", 0.0f, -273.15f, 0.0f, 0.0f, 0.0f, 0.0f,
+    VacuumElement() : Element("Vacuum", 0.0f, 20.0f, 0.0f, 0.0f, 0.0f, 0.0f,
                               0.0f, 0.0f, false, false, false, false,
-                              0.0f, 0.0f, 0.0f, 0.0f, 0.0f) {}  // Zero heat transfer!
+                              0.0f, 0.0f, 0.0f, 0.0f, 0.0f) {}  // Room temp (neutral, won't corrupt cells)
     
     // Override: Vacuum cannot transfer heat
     bool canTransferHeat() const override { return false; }

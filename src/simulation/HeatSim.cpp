@@ -1,4 +1,5 @@
 #include "HeatSim.h"
+#include "GasSim.h"
 #include "ElementTypes.h"
 #include <cmath>
 #include <iostream>
@@ -156,11 +157,8 @@ bool HeatSim::update(float deltaTime) {
             }
             
             // Apply calculated temperature
-            // GASES: Skip temperature updates - gas temperature is handled by GasSim only
-            // But still allow phase changes (handled later in this function)
-            if (!cellPropsCheck.isGas) {
-                cell.temperature = newTemps[y][x];
-            }
+            // All elements (including gases) participate in heat transfer
+            cell.temperature = newTemps[y][x];
             
             // Environmental cooling removed - vacuum is a perfect insulator
             // Cells only exchange heat with neighboring cells, not environment
@@ -238,34 +236,26 @@ void HeatSim::collectCondensedWater(Cell& cell, int x, int y, float originalMass
         
         Cell& neighbor = grid->getCell(nx, ny);
         
-        // If neighbor is water and has space (< 1.0 kg), merge into it
-        if (neighbor.elementType == ElementType::Liquid_Water && neighbor.mass < 1.0f) {
-            float spaceAvailable = 1.0f - neighbor.mass;
-            float mergeAmount = std::min(remainingMass, spaceAvailable);
+        // If neighbor is water and has space, merge into it
+        if (neighbor.elementType == ElementType::Liquid_Water) {
+            float maxWaterMass = GasSim::getMaxMassForElement(ElementType::Liquid_Water);
+            if (neighbor.mass < maxWaterMass) {
+                float spaceAvailable = maxWaterMass - neighbor.mass;
+                float mergeAmount = std::min(remainingMass, spaceAvailable);
             
-            neighbor.mass += mergeAmount;
-            neighbor.updated = true;  // Mark neighbor as updated so it flows next tick
-            neighbor.updateColor();  // Update color for new mass
-            remainingMass -= mergeAmount;
-            
-            if (remainingMass < 0.001f) break;
+                neighbor.mass += mergeAmount;
+                neighbor.updated = true;  // Mark neighbor as updated so it flows next tick
+                neighbor.updateColor();  // Update color for new mass
+                remainingMass -= mergeAmount;
+                
+                if (remainingMass < 0.001f) break;
+            }
         }
     }
     
     // Update this cell with remaining mass
     cell.mass = remainingMass;
     if (remainingMass < 0.0001f) {
-        cell.elementType = ElementType::Vacuum;
-        cell.mass = 0.0f;
-        cell.pressure = 0.0f;
-        cell.temperature = -273.15f;
-        cell.velocityX = 0.0f;
-        cell.velocityY = 0.0f;
-        cell.updated = false;
-        cell.targetElementType = ElementType::Empty;
-        cell.phaseTransitionProgress = 0.0f;
-        cell.phaseTransitionSpeed = 0.0f;
-        cell.microMassDecayTime = 0.0f;
-        cell.updateColor();  // Use proper vacuum color
+        cell.convertToVacuum();
     }
 }

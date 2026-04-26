@@ -8,6 +8,10 @@ GameGUI::~GameGUI() {
         delete simSpeedSlider;
         simSpeedSlider = nullptr;
     }
+    if (elementSelector) {
+        delete elementSelector;
+        elementSelector = nullptr;
+    }
 }
 
 void GameGUI::initialize(const sf::Font& font) {
@@ -15,6 +19,9 @@ void GameGUI::initialize(const sf::Font& font) {
     
     // Build the skillbar layout
     buildSkillbarLayout();
+    
+    // Build element selector layout
+    buildElementSelectorLayout();
     
     initialized = true;
 }
@@ -25,6 +32,7 @@ void GameGUI::handleResize(int windowWidth, int windowHeight) {
     
     // Rebuild layout with new dimensions
     buildSkillbarLayout();
+    buildElementSelectorLayout();
 }
 
 void GameGUI::render(Renderer& renderer) {
@@ -32,32 +40,73 @@ void GameGUI::render(Renderer& renderer) {
     
     // Render skillbar border and all its children
     skillbarBorder.render(renderer);
+    
+    // Render element selector (DevMode only - use isAdminMode)
+    extern bool isAdminMode;
+    if (isAdminMode && elementSelector) {
+        elementSelector->render(renderer);
+    }
 }
 
 void GameGUI::handleMousePress(const sf::Vector2f& mousePos) {
-    if (!initialized || !simSpeedSlider) return;
+    if (!initialized) return;
     
     // Route mouse events to slider
-    simSpeedSlider->handleMousePress(mousePos);
+    if (simSpeedSlider) {
+        simSpeedSlider->handleMousePress(mousePos);
+    }
+    
+    // Route to element selector (DevMode only - use isAdminMode)
+    extern bool isAdminMode;
+    if (isAdminMode && elementSelector) {
+        elementSelector->handleMousePress(mousePos);
+    }
 }
 
 void GameGUI::handleMouseRelease() {
-    if (!initialized || !simSpeedSlider) return;
+    if (!initialized) return;
     
-    simSpeedSlider->handleMouseRelease();
+    if (simSpeedSlider) {
+        simSpeedSlider->handleMouseRelease();
+    }
+    
+    extern bool isAdminMode;
+    if (isAdminMode && elementSelector) {
+        elementSelector->handleMouseRelease();
+    }
 }
 
 void GameGUI::handleMouseMove(const sf::Vector2f& mousePos) {
-    if (!initialized || !simSpeedSlider) return;
+    if (!initialized) return;
     
-    simSpeedSlider->handleMouseMove(mousePos);
+    if (simSpeedSlider) {
+        simSpeedSlider->handleMouseMove(mousePos);
+    }
+    
+    extern bool isAdminMode;
+    if (isAdminMode && elementSelector) {
+        elementSelector->handleMouseMove(mousePos);
+    }
 }
 
 bool GameGUI::isMouseOverUI(const sf::Vector2f& mousePos) const {
     if (!initialized) return false;
     
     // Check if mouse is over skillbar border
-    return skillbarBorder.containsPoint(mousePos);
+    if (skillbarBorder.containsPoint(mousePos)) return true;
+    
+    // Check if mouse is over element selector (DevMode only)
+    extern bool isAdminMode;
+    if (isAdminMode && elementSelector) {
+        sf::Vector2f elemPos = elementSelector->getPosition();
+        sf::Vector2f elemSize = elementSelector->getSize();
+        if (mousePos.x >= elemPos.x && mousePos.x <= elemPos.x + elemSize.x &&
+            mousePos.y >= elemPos.y && mousePos.y <= elemPos.y + elemSize.y) {
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 void GameGUI::buildSkillbarLayout() {
@@ -80,4 +129,24 @@ void GameGUI::buildSkillbarLayout() {
     // Add slider as UIElement child (polymorphic - handles all internal rendering)
     // Position: 5% from left, 15% from top, 90% width, 70% height of border
     skillbarBorder.addChild(simSpeedSlider, 0.05f, 0.15f, 0.90f, 0.70f);
+}
+
+void GameGUI::buildElementSelectorLayout() {
+    if (!fontPtr) return;
+    
+    // Create or recreate element selector
+    if (!elementSelector) {
+        elementSelector = new UIElementSelector();
+    }
+    
+    // Position in upper-right corner
+    // At 1920x1080: x = 1920 - 288 - 20 = 1612, y = 20
+    float selectorX = currentWindowWidth - 288.0f - 20.0f;
+    float selectorY = 20.0f;
+    
+    elementSelector->initialize(selectorX, selectorY, *fontPtr);
+    
+    // Set DevMode visibility (use isAdminMode)
+    extern bool isAdminMode;
+    elementSelector->setDevMode(isAdminMode);
 }

@@ -37,7 +37,7 @@ struct Cell {
     Cell()
         : elementType(ElementType::Vacuum)  // Default is vacuum, not empty
         , mass(0.0f)                        // No mass in vacuum
-        , temperature(-273.15f)             // Absolute zero in vacuum
+        , temperature(20.0f)                // Room temp (neutral, prevents corruption)
         , pressure(0.0f)                    // No pressure in vacuum
         , velocityX(0.0f)
         , velocityY(0.0f)
@@ -48,6 +48,23 @@ struct Cell {
         , phaseTransitionSpeed(0.0f)
         , microMassDecayTime(0.0f)
     {
+    }
+
+    // Convert this cell to vacuum with proper defaults
+    // Use this instead of manually setting fields to prevent mistakes
+    void convertToVacuum() {
+        elementType = ElementType::Vacuum;
+        mass = 0.0f;
+        temperature = 20.0f;  // Room temp (neutral, prevents corruption)
+        pressure = 0.0f;
+        velocityX = 0.0f;
+        velocityY = 0.0f;
+        updated = false;
+        targetElementType = ElementType::Empty;
+        phaseTransitionProgress = 0.0f;
+        phaseTransitionSpeed = 0.0f;
+        microMassDecayTime = 0.0f;
+        updateColor();
     }
 
     void updateColor() {
