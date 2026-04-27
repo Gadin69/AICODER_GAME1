@@ -2,6 +2,7 @@
 #include "../../rendering/Renderer.h"
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 
 UIElementSelector::UIElementSelector() {
 }
@@ -45,6 +46,8 @@ void UIElementSelector::initialize(float x, float y, const sf::Font& font) {
     leftArrow->setCallback([this]() {
         currentElementIndex = (currentElementIndex - 1 + validElements.size()) % validElements.size();
         currentElement = validElements[currentElementIndex];
+        std::cout << "[ElementSelector] Left arrow - Index: " << currentElementIndex << "/" << validElements.size() 
+                  << " Element: " << ElementTypes::getTypeName(currentElement) << std::endl;
         onElementChanged();
     });
     
@@ -54,6 +57,8 @@ void UIElementSelector::initialize(float x, float y, const sf::Font& font) {
     rightArrow->setCallback([this]() {
         currentElementIndex = (currentElementIndex + 1) % validElements.size();
         currentElement = validElements[currentElementIndex];
+        std::cout << "[ElementSelector] Right arrow - Index: " << currentElementIndex << "/" << validElements.size() 
+                  << " Element: " << ElementTypes::getTypeName(currentElement) << std::endl;
         onElementChanged();
     });
     
@@ -110,28 +115,40 @@ void UIElementSelector::initialize(float x, float y, const sf::Font& font) {
 }
 
 void UIElementSelector::populateValidElements() {
-    // Add all elements except Empty
-    validElements = {
-        ElementType::Vacuum,
-        ElementType::Solid,
-        ElementType::Solid_Ice,
-        ElementType::Solid_DryIce,
-        ElementType::Solid_Oil,
-        ElementType::Solid_IndestructibleInsulator,
-        ElementType::Gas_O2,
-        ElementType::Gas_Lava,
-        ElementType::Gas_CO2,
-        ElementType::Gas_Oil,
-        ElementType::Liquid_Water,
-        ElementType::Liquid_Lava,
-        ElementType::Liquid_Oil,
-        ElementType::ContaminatedWater,
-        ElementType::Solid_ContaminatedWater
-    };
+    // Clear existing elements first (in case this is called multiple times)
+    validElements.clear();
+    
+    // Dynamically iterate through ALL ElementType enum values
+    // This automatically includes any new elements added to the enum
+    int enumCount = static_cast<int>(ElementType::Gas_Nitrogen) + 1;  // Last element + 1
+    std::cout << "[ElementSelector] Enum count: " << enumCount << std::endl;
+    
+    for (int i = 0; i < enumCount; i++) {
+        ElementType type = static_cast<ElementType>(i);
+        
+        // Skip Empty element (not placeable)
+        if (type == ElementType::Empty) continue;
+        
+        validElements.push_back(type);
+    }
+    
+    std::cout << "[ElementSelector] Found " << validElements.size() << " elements" << std::endl;
+    
+    // Print ALL elements in the list
+    std::cout << "[ElementSelector] Complete element list:" << std::endl;
+    for (size_t i = 0; i < validElements.size(); i++) {
+        std::cout << "  [" << i << "] " << ElementTypes::getTypeName(validElements[i]) << std::endl;
+    }
     
     // Start with Water
     currentElement = ElementType::Liquid_Water;
-    currentElementIndex = 10;  // Index of Liquid_Water in the list
+    // Find Water's index in the validElements list
+    for (size_t i = 0; i < validElements.size(); i++) {
+        if (validElements[i] == ElementType::Liquid_Water) {
+            currentElementIndex = i;
+            break;
+        }
+    }
 }
 
 void UIElementSelector::updateElementPreview() {
@@ -160,12 +177,27 @@ void UIElementSelector::updateElementPreview() {
 void UIElementSelector::onElementChanged() {
     updateElementPreview();
     
-    // Update temperature to element's default if it's reasonable
+    // Set temperature to midpoint between phase change points
+    // This keeps the element in a stable phase when selected
     const Element& props = ElementTypes::getElement(currentElement);
-    if (props.defaultTemperature >= -273.0f && props.defaultTemperature <= 5000.0f) {
-        temperatureSlider->currentValue = props.defaultTemperature;
+    
+    // Calculate midpoint between freezing and boiling points
+    float phaseTempLow = props.freezingPoint;
+    float phaseTempHigh = props.boilingPoint;
+    
+    // For elements with valid phase change points, set temp to midpoint
+    if (phaseTempLow != 0.0f || phaseTempHigh != 0.0f) {
+        float targetTemp = (phaseTempLow + phaseTempHigh) / 2.0f;
+        
+        // Clamp to slider range
+        targetTemp = std::max(-273.0f, std::min(5000.0f, targetTemp));
+        
+        // Update slider and input
+        isUpdatingFromSlider = true;
+        temperatureSlider->currentValue = targetTemp;
         temperatureSlider->updateThumbPosition();
-        temperatureInput->setValue(props.defaultTemperature);
+        temperatureInput->setValue(targetTemp);
+        isUpdatingFromSlider = false;
         updateTempDisplay();
     }
 }
@@ -173,7 +205,10 @@ void UIElementSelector::onElementChanged() {
 void UIElementSelector::onTemperatureChanged(float newTemp) {
     updateTempDisplay();
     
-    // Check if temperature triggers phase change
+    // DISABLED: Auto phase change when browsing elements
+    // This was causing the element index to jump around when temperature triggered phase changes
+    // Phase changes should only happen when placing cells, not when selecting elements
+    /*
     const Element& props = ElementTypes::getElement(currentElement);
     ElementType newPhase = props.getPhaseAtTemperature(newTemp);
     
@@ -190,6 +225,7 @@ void UIElementSelector::onTemperatureChanged(float newTemp) {
         
         updateElementPreview();
     }
+    */
 }
 
 void UIElementSelector::onMassChanged(float newMass) {

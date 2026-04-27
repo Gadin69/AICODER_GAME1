@@ -206,10 +206,10 @@ void HeatSim::checkPhaseChangeTriggers(int x, int y, float /*deltaTime*/) {
     if (phaseExecCount++ % 50 == 0) {
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - phaseStartTime).count();
-        std::cout << "[" << elapsed << "ms] [PHASE] "
-                  << ElementTypes::getTypeName(cell.elementType)
-                  << " -> " << ElementTypes::getTypeName(newType)
-                  << " at " << cell.temperature << "°C" << std::endl;
+        // std::cout << "[" << elapsed << "ms] [PHASE] "
+        //           << ElementTypes::getTypeName(cell.elementType)
+        //           << " -> " << ElementTypes::getTypeName(newType)
+        //           << " at " << cell.temperature << "°C" << std::endl;
     }
     
     float oldMass = cell.mass;

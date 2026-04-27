@@ -92,11 +92,11 @@ void UIThumbnailViewer::render(Renderer& renderer) {
     ));
     sprite.setScale(thumbnailScale);
     
-    std::cout << "[UIThumbnailViewer] Drawing sprite at (" 
-              << sprite.getPosition().x << ", " << sprite.getPosition().y 
-              << ") scale=" << sprite.getScale().x << "x" << sprite.getScale().y 
-              << " texture=" << thumbnailTexture->getSize().x << "x" << thumbnailTexture->getSize().y 
-              << std::endl;
+    // std::cout << "[UIThumbnailViewer] Drawing sprite at (" 
+    //           << sprite.getPosition().x << ", " << sprite.getPosition().y 
+    //           << ") scale=" << sprite.getScale().x << "x" << sprite.getScale().y 
+    //           << " texture=" << thumbnailTexture->getSize().x << "x" << thumbnailTexture->getSize().y 
+    //           << std::endl;
     
     // Draw directly to render window (avoid batching issues with local sprite)
     renderer.getRenderWindow().draw(sprite);

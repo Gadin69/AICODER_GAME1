@@ -40,17 +40,11 @@ GasSim::GasSim()
 void GasSim::initializeGasTypes() {
     gasTypes.clear();
     
-    // Iterate through all ElementType values and check if they're gases
-    ElementType allTypes[] = {
-        ElementType::Empty, ElementType::Vacuum, ElementType::Solid,
-        ElementType::Solid_Ice, ElementType::Solid_DryIce, ElementType::Solid_Oil,
-        ElementType::Solid_IndestructibleInsulator, ElementType::Gas_O2,
-        ElementType::Gas_Lava, ElementType::Gas_CO2, ElementType::Gas_Oil,
-        ElementType::Liquid_Water, ElementType::Liquid_Lava, ElementType::Liquid_Oil,
-        ElementType::ContaminatedWater, ElementType::Solid_ContaminatedWater
-    };
-    
-    for (ElementType type : allTypes) {
+    // Dynamically iterate through ALL ElementType enum values
+    // This automatically includes any new elements added to the enum
+    int enumCount = static_cast<int>(ElementType::Gas_Nitrogen) + 1;  // Last element + 1
+    for (int i = 0; i < enumCount; i++) {
+        ElementType type = static_cast<ElementType>(i);
         const Element& props = ElementTypes::getElement(type);
         if (props.isGas) {
             gasTypes.insert(type);
@@ -933,9 +927,9 @@ bool GasSim::update(float deltaTime) {
                         
                         static int overmassDebugCount = 0;
                         if (overmassDebugCount < 10) {
-                            std::cerr << "[GAS EXPAND] Over-mass (" << cellMass << "kg) distributing " 
-                                      << excessMass << "kg to " << availableNeighbors.size() 
-                                      << " neighbors, keeping " << maxMass3 << "kg" << std::endl;
+                            // std::cerr << "[GAS EXPAND] Over-mass (" << cellMass << "kg) distributing " 
+                            //           << excessMass << "kg to " << availableNeighbors.size() 
+                            //           << " neighbors, keeping " << maxMass3 << "kg" << std::endl;
                             overmassDebugCount++;
                         }
                     }

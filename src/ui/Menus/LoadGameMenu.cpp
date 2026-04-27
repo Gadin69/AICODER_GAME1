@@ -349,13 +349,13 @@ void LoadGameMenu::renderDetailsPanel(Renderer& renderer) {
                   << " HasThumbnail: " << thumbnailViewer.hasThumbnail() << std::endl;
     }
     
-    std::cout << "[LoadGameMenu] Calling thumbnailViewer.render()" << std::endl;
-    std::cout << "[LoadGameMenu] Thumbnail position: (" 
-              << thumbnailViewer.getPosition().x << ", " 
-              << thumbnailViewer.getPosition().y << ")" << std::endl;
-    std::cout << "[LoadGameMenu] Thumbnail size: " 
-              << thumbnailViewer.getSize().x << "x" 
-              << thumbnailViewer.getSize().y << std::endl;
+    // std::cout << "[LoadGameMenu] Calling thumbnailViewer.render()" << std::endl;
+    // std::cout << "[LoadGameMenu] Thumbnail position: (" 
+    //           << thumbnailViewer.getPosition().x << ", " 
+    //           << thumbnailViewer.getPosition().y << ")" << std::endl;
+    // std::cout << "[LoadGameMenu] Thumbnail size: " 
+    //           << thumbnailViewer.getSize().x << "x" 
+    //           << thumbnailViewer.getSize().y << std::endl;
     
     thumbnailViewer.render(renderer);
 }

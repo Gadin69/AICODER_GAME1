@@ -18,7 +18,63 @@ enum class ElementType {
     Liquid_Lava,
     Liquid_Oil,  // Oil (floats on water)
     ContaminatedWater,
-    Solid_ContaminatedWater  // Frozen contaminated water
+    Solid_ContaminatedWater,  // Frozen contaminated water
+    
+    // NEW GASES
+    Gas_Hydrogen,
+    Gas_Methane,
+    Gas_Ammonia,
+    Gas_Chlorine,
+    Gas_SulfurDioxide,
+    Gas_Propane,
+    
+    // NEW LIQUIDS
+    Liquid_Mercury,
+    Liquid_Ethanol,
+    Liquid_Acetone,
+    Liquid_Glycerol,
+    Liquid_SulfuricAcid,
+    Liquid_Nitrogen,
+    Liquid_Oxygen,
+    Liquid_Bromine,
+    
+    // NEW SOLIDS
+    Solid_Iron,
+    Solid_Copper,
+    Solid_Aluminum,
+    Solid_Silver,
+    Solid_Gold,
+    Solid_Lead,
+    Solid_Zinc,
+    
+    // LIQUID METALS
+    Liquid_Iron,
+    Liquid_Copper,
+    Liquid_Aluminum,
+    Liquid_Silver,
+    Liquid_Gold,
+    Liquid_Lead,
+    Liquid_Zinc,
+    
+    // LIQUID GAS FORMS (condensed gases)
+    Liquid_Methane,
+    Liquid_Ammonia,
+    Liquid_Chlorine,
+    Liquid_SulfurDioxide,
+    Liquid_Propane,
+    
+    // GAS LIQUID FORMS (vaporized liquids)
+    Gas_Mercury,
+    Gas_Ethanol,
+    Gas_Acetone,
+    Gas_Glycerol,
+    Gas_SulfuricAcid,
+    Gas_Oxygen,
+    Gas_Bromine,
+    
+    // CRYOGENIC ELEMENTS
+    Liquid_Hydrogen,
+    Gas_Nitrogen
 };
 
 // Forward declaration
@@ -121,4 +177,60 @@ private:
     static OilElement oilInstance;
     static ContaminatedWaterElement contaminatedWaterInstance;
     static Solid_ContaminatedWaterElement solidContaminatedWaterInstance;
+    
+    // NEW GAS INSTANCES
+    static HydrogenElement gasHydrogenInstance;
+    static MethaneElement gasMethaneInstance;
+    static AmmoniaElement gasAmmoniaInstance;
+    static ChlorineElement gasChlorineInstance;
+    static SulfurDioxideElement gasSulfurDioxideInstance;
+    static PropaneElement gasPropaneInstance;
+    
+    // NEW LIQUID INSTANCES
+    static MercuryElement liquidMercuryInstance;
+    static EthanolElement liquidEthanolInstance;
+    static AcetoneElement liquidAcetoneInstance;
+    static GlycerolElement liquidGlycerolInstance;
+    static SulfuricAcidElement liquidSulfuricAcidInstance;
+    static LiquidNitrogenElement liquidNitrogenInstance;
+    static LiquidOxygenElement liquidOxygenInstance;
+    static BromineElement liquidBromineInstance;
+    
+    // NEW SOLID INSTANCES
+    static IronElement solidIronInstance;
+    static CopperElement solidCopperInstance;
+    static AluminumElement solidAluminumInstance;
+    static SilverElement solidSilverInstance;
+    static GoldElement solidGoldInstance;
+    static LeadElement solidLeadInstance;
+    static ZincElement solidZincInstance;
+    
+    // LIQUID METAL INSTANCES
+    static LiquidIronElement liquidIronInstance;
+    static LiquidCopperElement liquidCopperInstance;
+    static LiquidAluminumElement liquidAluminumInstance;
+    static LiquidSilverElement liquidSilverInstance;
+    static LiquidGoldElement liquidGoldInstance;
+    static LiquidLeadElement liquidLeadInstance;
+    static LiquidZincElement liquidZincInstance;
+    
+    // LIQUID GAS FORMS (condensed gases)
+    static LiquidMethaneElement liquidMethaneInstance;
+    static LiquidAmmoniaElement liquidAmmoniaInstance;
+    static LiquidChlorineElement liquidChlorineInstance;
+    static LiquidSulfurDioxideElement liquidSulfurDioxideInstance;
+    static LiquidPropaneElement liquidPropaneInstance;
+    
+    // GAS LIQUID FORMS (vaporized liquids)
+    static GasMercuryElement gasMercuryInstance;
+    static GasEthanolElement gasEthanolInstance;
+    static GasAcetoneElement gasAcetoneInstance;
+    static GasGlycerolElement gasGlycerolInstance;
+    static GasSulfuricAcidElement gasSulfuricAcidInstance;
+    static GasOxygenElement gasOxygenInstance;
+    static GasBromineElement gasBromineInstance;
+    
+    // CRYOGENIC ELEMENTS
+    static LiquidHydrogenElement liquidHydrogenInstance;
+    static GasNitrogenElement gasNitrogenInstance;
 };

@@ -181,6 +181,11 @@ void initializeFonts() {
     gameGUI->initialize(font);
     std::cout << "[INIT] gameGUI initialized" << std::endl;
     
+    // Connect overlay toggle pointers
+    gameGUI->heatMapOverlayPtr = &showHeatMapOverlay;
+    gameGUI->phaseOverlayPtr = &showPhaseOverlay;
+    gameGUI->densityOverlayPtr = &showDensityOverlay;
+    
     // Initialize in-game console
     sf::Vector2u windowSize = renderer.getRenderWindow().getSize();
     gameConsole = new GameConsole();
@@ -285,9 +290,10 @@ void handleMouseInput(const sf::Event& event) {
         return;
     }
     
-    if (isOverUI && event.is<sf::Event::MouseButtonReleased>()) {
-        return;
-    }
+    // Don't block mouse release - UI elements need to receive it to complete click actions
+    // if (isOverUI && event.is<sf::Event::MouseButtonReleased>()) {
+    //     return;
+    // }
     
     if (isOverUI && event.is<sf::Event::MouseMoved>()) {
         return;
@@ -319,6 +325,15 @@ void handleMouseInput(const sf::Event& event) {
         } else if (isRightMouseHeld) {
             placeCellAtMouse(sf::Mouse::Button::Right);
         }
+    } else if (event.is<sf::Event::MouseWheelScrolled>()) {
+        // Handle mouse wheel zoom during gameplay
+        auto wheelEvent = event.getIf<sf::Event::MouseWheelScrolled>();
+        if (wheelEvent && wheelEvent->wheel == sf::Mouse::Wheel::Vertical) {
+            // Only zoom if not over UI
+            if (!isOverUI) {
+                renderer.getCamera().handleMouseWheel(wheelEvent->delta);
+            }
+        }
     } else if (event.is<sf::Event::KeyPressed>()) {
         // Forward to element selector (DevMode - use isAdminMode)
         extern bool isAdminMode;
@@ -331,7 +346,7 @@ void handleMouseInput(const sf::Event& event) {
         extern bool isAdminMode;
         auto textEvent = event.getIf<sf::Event::TextEntered>();
         if (isAdminMode && gameGUI && gameGUI->getElementSelector() && textEvent) {
-            if (DEBUG_MODE) std::cout << "[main.cpp] Forwarding TextEntered: unicode=" << textEvent->unicode << std::endl;
+            // if (DEBUG_MODE) std::cout << "[main.cpp] Forwarding TextEntered: unicode=" << textEvent->unicode << std::endl;
             gameGUI->getElementSelector()->handleTextEntered(*textEvent);
         }
     }
@@ -463,7 +478,7 @@ void placeCellAtMouse(sf::Mouse::Button button) {
         // UNLOCK grid after modifications
         simGrid.unlock();
         
-        if (DEBUG_MODE) std::cout << "Placed " << name << " at (" << tileX << ", " << tileY << ")" << std::endl;
+        // if (DEBUG_MODE) std::cout << "Placed " << name << " at (" << tileX << ", " << tileY << ")" << std::endl;
     } else if (button == sf::Mouse::Button::Right) {
         // THREAD-SAFE: Lock grid before clearing cells
         simGrid.lock();
@@ -573,6 +588,21 @@ void updateElementInspector() {
         // Build inspection string with metric and imperial
         std::string info = "Element: " + props.name + "\n";
         
+        // Phase determination based on element properties and temperature
+        std::string phase = "Unknown";
+        if (cell.elementType == ElementType::Empty || cell.elementType == ElementType::Vacuum) {
+            phase = "N/A";
+        } else if (props.isGas) {
+            phase = "Gas";
+        } else if (props.isLiquid) {
+            phase = "Liquid";
+        } else if (props.isSolid) {
+            phase = "Solid";
+        }
+        info += "Phase: ";
+        info += phase;
+        info += "\n";
+        
         // Temperature in Celsius and Fahrenheit (1 decimal place)
         // Safety check for NaN/Inf values
         float displayTemp = cell.temperature;
@@ -596,8 +626,9 @@ void updateElementInspector() {
             snprintf(massBuf, sizeof(massBuf), "Mass: %.4f kg\n", cell.mass);
             info += massBuf;
             
-            printf("DEBUG: Cell at (%d,%d) isLiquid=%d, isFluidInit=%d\n", 
-                   tileX, tileY, props.isLiquid, simManager.isFluidSimInitialized());
+            // DEBUG: Uncomment to debug liquid initialization
+            // printf("DEBUG: Cell at (%d,%d) isLiquid=%d, isFluidInit=%d\n", 
+            //        tileX, tileY, props.isLiquid, simManager.isFluidSimInitialized());
             
             // Show trapped status for liquids
             if (props.isLiquid) {
@@ -1081,15 +1112,20 @@ int main() {
                     case sf::Keyboard::Scancode::F2:  // Toggle element inspector
                         showElementInspector = !showElementInspector;
                         break;
+#if 0  // Overlay toggles moved to UI buttons only (H, P, D buttons)
                     case sf::Keyboard::Scancode::F3:  // Toggle heat map overlay
                         showHeatMapOverlay = !showHeatMapOverlay;
+                        if (gameGUI) gameGUI->syncOverlayButtons();
                         break;
                     case sf::Keyboard::Scancode::F4:  // Toggle phase overlay
                         showPhaseOverlay = !showPhaseOverlay;
+                        if (gameGUI) gameGUI->syncOverlayButtons();
                         break;
                     case sf::Keyboard::Scancode::F5:  // Toggle density overlay
                         showDensityOverlay = !showDensityOverlay;
+                        if (gameGUI) gameGUI->syncOverlayButtons();
                         break;
+#endif
 #endif
                     case sf::Keyboard::Scancode::Grave:  // ` key - Toggle console
                         if (gameConsole) {

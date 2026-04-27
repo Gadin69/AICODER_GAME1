@@ -114,6 +114,146 @@ struct Cell {
             case ElementType::Solid_ContaminatedWater:
                 color = sf::Color(150, 180, 150, 200);  // Murky frozen green-gray
                 break;
+            
+            // NEW GASES
+            case ElementType::Gas_Hydrogen:
+                color = sf::Color(200, 220, 255, 80);  // Very light blue, almost transparent
+                break;
+            case ElementType::Gas_Methane:
+                color = sf::Color(180, 200, 180, 90);  // Pale greenish-gray
+                break;
+            case ElementType::Gas_Ammonia:
+                color = sf::Color(220, 240, 200, 100);  // Pale yellow-green
+                break;
+            case ElementType::Gas_Chlorine:
+                color = sf::Color(150, 255, 100, 120);  // Yellow-green (characteristic chlorine color)
+                break;
+            case ElementType::Gas_SulfurDioxide:
+                color = sf::Color(200, 200, 150, 110);  // Pale yellow-gray
+                break;
+            case ElementType::Gas_Propane:
+                color = sf::Color(190, 190, 190, 85);  // Light gray, slightly transparent
+                break;
+            
+            // NEW LIQUIDS
+            case ElementType::Liquid_Mercury:
+                color = sf::Color(180, 180, 190, 240);  // Silvery-gray metallic
+                break;
+            case ElementType::Liquid_Ethanol:
+                color = sf::Color(200, 220, 255, 160);  // Clear blue-tinted
+                break;
+            case ElementType::Liquid_Acetone:
+                color = sf::Color(210, 230, 255, 150);  // Very pale blue, clear
+                break;
+            case ElementType::Liquid_Glycerol:
+                color = sf::Color(230, 220, 200, 200);  // Viscous honey-like, pale yellow
+                break;
+            case ElementType::Liquid_SulfuricAcid:
+                color = sf::Color(220, 210, 180, 190);  // Oily yellow-brown
+                break;
+            case ElementType::Liquid_Nitrogen:
+                color = sf::Color(180, 200, 255, 170);  // Cryogenic pale blue
+                break;
+            case ElementType::Liquid_Oxygen:
+                color = sf::Color(150, 180, 255, 180);  // Pale blue (liquid O2 is paramagnetic blue)
+                break;
+            case ElementType::Liquid_Bromine:
+                color = sf::Color(180, 60, 30, 210);  // Deep reddish-brown
+                break;
+            
+            // NEW SOLIDS
+            case ElementType::Solid_Iron:
+                color = sf::Color(120, 120, 125, 255);  // Dark gray metallic
+                break;
+            case ElementType::Solid_Copper:
+                color = sf::Color(184, 115, 51, 255);  // Characteristic copper orange-brown
+                break;
+            case ElementType::Solid_Aluminum:
+                color = sf::Color(200, 200, 210, 255);  // Light silvery-gray
+                break;
+            case ElementType::Solid_Silver:
+                color = sf::Color(210, 210, 220, 255);  // Bright silvery-white
+                break;
+            case ElementType::Solid_Gold:
+                color = sf::Color(255, 215, 0, 255);  // Rich golden yellow
+                break;
+            case ElementType::Solid_Lead:
+                color = sf::Color(100, 100, 110, 255);  // Dark gray-blue
+                break;
+            case ElementType::Solid_Zinc:
+                color = sf::Color(160, 160, 165, 255);  // Medium gray metallic
+                break;
+            
+            // LIQUID METALS
+            case ElementType::Liquid_Iron:
+                color = sf::Color(255, 140, 50, 230);  // Glowing orange-red molten
+                break;
+            case ElementType::Liquid_Copper:
+                color = sf::Color(255, 120, 40, 230);  // Bright orange molten copper
+                break;
+            case ElementType::Liquid_Aluminum:
+                color = sf::Color(220, 220, 230, 220);  // Bright silvery liquid
+                break;
+            case ElementType::Liquid_Silver:
+                color = sf::Color(230, 230, 240, 230);  // Bright liquid silver
+                break;
+            case ElementType::Liquid_Gold:
+                color = sf::Color(255, 200, 50, 240);  // Glowing liquid gold
+                break;
+            case ElementType::Liquid_Lead:
+                color = sf::Color(150, 150, 160, 230);  // Dark gray liquid
+                break;
+            case ElementType::Liquid_Zinc:
+                color = sf::Color(200, 200, 205, 220);  // Bluish-white liquid
+                break;
+            
+            // LIQUID GAS FORMS
+            case ElementType::Liquid_Methane:
+                color = sf::Color(160, 180, 160, 190);  // Pale greenish cryogenic liquid
+                break;
+            case ElementType::Liquid_Ammonia:
+                color = sf::Color(200, 220, 180, 180);  // Pale yellow-green liquid
+                break;
+            case ElementType::Liquid_Chlorine:
+                color = sf::Color(130, 230, 80, 190);  // Yellow-green liquid
+                break;
+            case ElementType::Liquid_SulfurDioxide:
+                color = sf::Color(180, 180, 130, 190);  // Pale yellow-gray liquid
+                break;
+            case ElementType::Liquid_Propane:
+                color = sf::Color(170, 170, 170, 180);  // Clear colorless liquid
+                break;
+            
+            // GAS LIQUID FORMS (vapors)
+            case ElementType::Gas_Mercury:
+                color = sf::Color(160, 160, 170, 100);  // Faint silvery vapor
+                break;
+            case ElementType::Gas_Ethanol:
+                color = sf::Color(180, 200, 230, 90);  // Pale blue-tinted vapor
+                break;
+            case ElementType::Gas_Acetone:
+                color = sf::Color(190, 210, 230, 85);  // Very pale blue vapor
+                break;
+            case ElementType::Gas_Glycerol:
+                color = sf::Color(210, 200, 180, 95);  // Faint yellowish vapor
+                break;
+            case ElementType::Gas_SulfuricAcid:
+                color = sf::Color(200, 190, 160, 100);  // Faint yellow-brown corrosive vapor
+                break;
+            case ElementType::Gas_Oxygen:
+                color = sf::Color(130, 160, 230, 95);  // Pale blue oxygen gas
+                break;
+            case ElementType::Gas_Bromine:
+                color = sf::Color(160, 50, 20, 110);  // Reddish-brown toxic vapor
+                break;
+            
+            // CRYOGENIC ELEMENTS
+            case ElementType::Liquid_Hydrogen:
+                color = sf::Color(170, 190, 255, 160);  // Very pale blue cryogenic liquid
+                break;
+            case ElementType::Gas_Nitrogen:
+                color = sf::Color(150, 170, 220, 80);  // Pale blue-gray nitrogen gas
+                break;
             default:
                 color = sf::Color::Transparent;
                 break;
